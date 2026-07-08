@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Server Manager">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5968/5968756.png">
+    <title>Discord Server Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo">🎬</div>
+            <div class="header-text">
+                <h1>Server Manager</h1>
+                <span id="connectionStatus" class="status-text">Verbinde...</span>
+            </div>
+            <div id="statusDot" class="status-dot offline"></div>
+        </header>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <span class="stat-label">Server</span>
+                <span class="stat-value" id="serverCount">0</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Resets</span>
+                <span class="stat-value" id="resetCount">0</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Status</span>
+                <span class="stat-value" id="progressLabel">Bereit</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📡 Server auswählen</h2>
+            <p class="hint">Nur Server mit Admin-Rechten</p>
+            <select id="serverSelect" class="select">
+                <option value="">-- Lade Server... --</option>
+            </select>
+            <button id="refreshServers" class="btn btn-secondary">🔄 Aktualisieren</button>
+        </div>
+
+        <div class="card">
+            <h2>⚙️ Reset konfigurieren</h2>
+            <label for="channelName">Kanalname</label>
+            <input type="text" id="channelName" class="input" value="dreh" placeholder="z.B. dreh, szene">
+            <p class="hint">Kanäle heißen: dreh-1, dreh-2, ...</p>
+            <label for="channelCount">Anzahl Kanäle</label>
+            <div class="slider-row">
+                <input type="range" id="channelCount" class="slider" min="1" max="50" value="5">
+                <span id="channelCountDisplay" class="slider-value">5</span>
+            </div>
+            <button id="resetBtn" class="btn btn-primary">🔄 Server zurücksetzen</button>
+            <button id="deleteOnlyBtn" class="btn btn-danger">🗑️ Nur Kanäle löschen</button>
+        </div>
+
+        <div class="card" id="progressCard" style="display:none;">
+            <h2>⏳ Fortschritt</h2>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="progressText" class="progress-text">Bereit...</p>
+        </div>
+
+        <div class="card">
+            <h2>📋 Verlauf</h2>
+            <div id="historyList" class="history-list">
+                <p class="empty-text">Noch keine Resets</p>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>🔒 Nur für eigene Server • Schulprojekt</p>
+            <p id="apiUrl" class="api-url"></p>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
