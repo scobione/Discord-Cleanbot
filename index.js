@@ -33,7 +33,7 @@ const LOG_CATEGORY_NAME = 'Resettet Server';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const MONGO_URI = process.env.MONGO_URI || '';
 
-// ============ MONGODB ============
+//============ MONGODB ============
 let db = null;
 
 async function connectDB() {
@@ -42,7 +42,10 @@ async function connectDB() {
         return;
     }
     try {
-        const mongoClient = new MongoClient(MONGO_URI);
+        const mongoClient = new MongoClient(MONGO_URI, {
+            tlsAllowInvalidCertificates: true,
+            serverSelectionTimeoutMS: 5000
+        });
         await mongoClient.connect();
         db = mongoClient.db('server-manager');
         console.log('✅ MongoDB verbunden');
