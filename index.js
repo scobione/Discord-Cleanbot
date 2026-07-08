@@ -14,6 +14,20 @@ app.use(express.json());
 // Statische Dateien aus public-Ordner (absoluter Pfad)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Log-Historie für Dashboard
+let serverLogs = [];
+
+function serverLog(message, type = 'info', category = 'system') {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        message,
+        type,
+        category
+    };
+    serverLogs.unshift(entry);
+    if (serverLogs.length > 100) serverLogs.pop();
+    console.log(`[${category.toUpperCase()}] ${message}`);
+}
 // Startseite
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
