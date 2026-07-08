@@ -186,17 +186,17 @@ let currentProgress = { running: false, step: '', serverName: '', progressPercen
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) { console.error('❌ BOT_TOKEN nicht gesetzt!'); process.exit(1); }
 
+// Erst DB verbinden, dann Bot starten
+await connectDB();
 client.login(TOKEN);
 
 client.once('ready', async () => {
-    await connectDB();
     console.log(`✅ Bot online als ${client.user.tag}`);
     console.log(`📡 Auf ${client.guilds.cache.size} Servern`);
     console.log(`🔑 ${userKeys.length} Keys geladen`);
     console.log(`🛡️ Server ${PROTECTED_SERVER_ID} ist geschützt`);
     await sendKeyCommandEmbed();
 });
-
 // ============ KEY-EMBED ============
 async function sendKeyCommandEmbed() {
     const guild = client.guilds.cache.get(PROTECTED_SERVER_ID);
