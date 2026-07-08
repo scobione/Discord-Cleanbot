@@ -153,20 +153,44 @@ async function fetchStatus() {
 }
 
 async function fetchServers() {
-    if (!userKey) return;
+    if (!userKey) {
+        serverSelect.innerHTML = '<option value="">-- Bitte einloggen --</option>';
+        return;
+    }
     try {
         serverSelect.innerHTML = '<option value="">-- Lade... --</option>';
         const r = await fetch(API_BASE + '/servers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userKey })
+            body: JSON.stringify({ userKey: userKey })
         });
+        
+        if (r.status === 403) {
+            serverSelect.innerHTML = '<option value="">-- Key ungültig --</option>';
+            addLog('🔑 Key abgelaufen oder ungültig', 'error', 'system');
+            return;
+        }
+        
         const s = await r.json();
-        if (r.status === 403) { addLog('🔑 Key ungültig!', 'error', 'system'); return; }
-        if (!Array.isArray(s) || s.length === 0) { serverSelect.innerHTML = '<option value="">-- Keine Admin-Server --</option>'; return; }
+        
+        if (!Array.isArray(s) || s.length === 0) {
+            serverSelect.innerHTML = '<option value="">-- Keine Admin-Server --</option>';
+            return;
+        }
+        
         serverSelect.innerHTML = '<option value="">-- Server auswählen --</option>';
-        s.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; serverSelect.appendChild(o); });
-    } catch (e) { serverSelect.innerHTML = '<option value="">-- Fehler --</option>'; }
+        s.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = s.name;
+            serverSelect.appendChild(o);
+        });
+        
+        addLog(`📡 ${s.length} Server geladen`, 'info', 'bot');
+    } catch (e) {
+        serverSelect.innerHTML = '<option value="">-- Fehler beim Laden --</option>';
+        addLog('⚠️ Serverliste konnte nicht geladen werden', 'warning', 'system');
+    }
 }
 
 function updateHistory(h) {
