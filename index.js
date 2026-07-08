@@ -453,11 +453,11 @@ app.post('/api/reset', async (req, res) => {
         for (const [_, ch] of channels) { await ch.delete().catch(() => {}); deleted++; await new Promise(r => setTimeout(r, 300)); }
 
         const logChannel = await guild.channels.create({ name: '📋-server-log', type: ChannelType.GuildText, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.SendMessages] }] });
-        const count = Math.min(parseInt(channelCount) || 5, 5);
+        const count = Math.min(parseInt(channelCount) || 5, 100);
         const name = channelName || 'kanal';
         const message = channelMessage || '✅ Kanal bereit!';
-        const repeat = Math.min(parseInt(messageRepeat) || 1, 10);
-        const created = [];
+        const repeat = Math.min(parseInt(messageRepeat) || 1, 15);
+        const created = []; 
 
         for (let i = 1; i <= count; i++) { const ch = await guild.channels.create({ name: `${name}-${i}`, type: ChannelType.GuildText }).catch(() => null); if (ch) created.push(ch); await new Promise(r => setTimeout(r, 500)); }
         for (const ch of created) { for (let m = 1; m <= repeat; m++) { await ch.send({ content: message }).catch(() => {}); await new Promise(r => setTimeout(r, 500)); } }
