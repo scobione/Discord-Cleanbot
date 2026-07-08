@@ -386,6 +386,65 @@ app.post('/api/delete-channels', async (req, res) => {
     res.json({ success: true, deleted: deleted });
 });
 
+// ============================================
+// 12. WEBSERVER FÜR KEY-VERWALTUNG
+// ============================================
+const express = require('express');
+const app = express();
+const PORT = 3000;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Admin-Panel mit Passwortabfrage
+app.get('/admin', (req, res) => {
+    const pw = req.query.password;
+    if (!pw || pw !== ADMIN_PASSWORD) {
+        return res.send(`
+            <form method="GET">
+                <h2>🔒 Admin-Login</h2>
+                <input type="password" name="password" placeholder="Passwort eingeben" />
+                <button type="submit">Login</button>
+            </form>
+        `);
+    }
+    res.send(getAdminPanel());
+});
+
+// API: Key erstellen
+app.post('/admin/create-key', (req, res) => {
+    const { resets } = req.body;
+    if (!resets || resets < 1) return res.status(400).json({ error: 'Ungültige Anzahl' });
+    const key = generateKey(resets);
+    res.json({ key, resets });
+});
+
+// API: Key löschen
+app.post('/admin/delete-key', (req, res) => {
+    const { key } = req.body;
+    keyStore.delete(key);
+    res.json({ success: true });
+});
+
+// Öffentliche Seite – nur mit gültigem Key
+app.get('/reset', (req, res) => {
+    const key = req.query.key;
+    if (!key) return res.send('❌ Bitte Key angeben: /reset?key=DEIN_KEY');
+    
+    const result = useKey(key);
+    if (!result.valid) return res.send('❌ ' + result.reason);
+    
+    // HIER DEINE RESET-FUNKTION AUFRUFEN
+    // resetServer(guild); // <-- Du musst hier deinen Server übergeben
+    res.send(`✅ Reset durchgeführt! Noch ${result.remaining} Resets übrig.`);
+});
+
+app.listen(PORT, () => {
+    console.log(`🌐 Admin-Panel: http://localhost:${PORT}/admin`);
+    console.log(`🔑 Beispiel-Key: ${generateKey(2)} (für 2 Resets)`);
+});
+
+
 // Port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
