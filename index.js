@@ -10,25 +10,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-// Statische Dateien aus public-Ordner (absoluter Pfad)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Log-Historie für Dashboard
-let serverLogs = [];
-
-function serverLog(message, type = 'info', category = 'system') {
-    const entry = {
-        timestamp: new Date().toISOString(),
-        message,
-        type,
-        category
-    };
-    serverLogs.unshift(entry);
-    if (serverLogs.length > 100) serverLogs.pop();
-    console.log(`[${category.toUpperCase()}] ${message}`);
-}
-// Startseite
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -40,7 +23,7 @@ const client = new Client({
         GatewayIntentBits.MessageContent
     ]
 });
- 
+
 let resetStats = {
     totalResets: 0,
     history: []
@@ -102,7 +85,7 @@ app.get('/api/servers', (req, res) => {
 
 // Reset ausführen
 app.post('/api/reset', async (req, res) => {
-    const { serverId, channelCount, channelName } = req.body;
+    const { serverId, channelCount, channelName, channelMessage } = req.body;
     
     if (currentProgress.running) {
         return res.status(400).json({ error: 'Ein Reset läuft bereits' });
@@ -155,7 +138,7 @@ app.post('/api/reset', async (req, res) => {
         // 3. Neue Kanäle erstellen
         const count = Math.min(parseInt(channelCount) || 5, 50);
         const name = channelName || 'kanal';
-        const message = req.body.channelMessage || '✅ Kanal bereit!';
+        const message = channelMessage || '✅ Kanal funktioniert einwandfrei!';
         const createdChannels = [];
         
         for (let i = 1; i <= count; i++) {
@@ -177,8 +160,8 @@ app.post('/api/reset', async (req, res) => {
             await new Promise(r => setTimeout(r, 500));
         }
         
-        // 3b. Nachricht in jeden Kanal senden
-        currentProgress.step = `Sende Nachrichten...`;
+        // 4. Nachricht in jeden Kanal senden
+        currentProgress.step = 'Sende Nachrichten in Kanäle...';
         currentProgress.progressPercent = 85;
         
         for (const channel of createdChannels) {
@@ -188,7 +171,7 @@ app.post('/api/reset', async (req, res) => {
             await new Promise(r => setTimeout(r, 300));
         }
         
-        // 4. Erfolgsmeldung
+        // 5. Erfolgsmeldung
         currentProgress.step = 'Sende Bestätigung...';
         currentProgress.progressPercent = 98;
         
@@ -197,6 +180,7 @@ app.post('/api/reset', async (req, res) => {
                 `📊 **Statistik:**\n` +
                 `- Gelöschte Kanäle: ${deleted}\n` +
                 `- Neue Kanäle: ${count} × "${name}-X"\n` +
+                `- Nachricht: "${message}"\n` +
                 `- Log-Kanal: ${logChannel.name}\n\n` +
                 `🕐 ${new Date().toLocaleString('de-DE')}\n` +
                 `🤖 Ausgeführt von: ${client.user.tag}`
