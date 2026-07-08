@@ -155,17 +155,37 @@ app.post('/api/reset', async (req, res) => {
         // 3. Neue Kanäle erstellen
         const count = Math.min(parseInt(channelCount) || 5, 50);
         const name = channelName || 'kanal';
+        const message = req.body.channelMessage || '✅ Kanal bereit!';
+        const createdChannels = [];
         
         for (let i = 1; i <= count; i++) {
             currentProgress.step = `Erstelle Kanal ${i}/${count}: ${name}-${i}`;
-            currentProgress.progressPercent = 35 + Math.floor((i / count) * 60);
+            currentProgress.progressPercent = 35 + Math.floor((i / count) * 50);
             
-            await guild.channels.create({
+            const newChannel = await guild.channels.create({
                 name: `${name}-${i}`,
                 type: ChannelType.GuildText
-            }).catch(err => console.error(`Fehler bei ${name}-${i}:`, err.message));
+            }).catch(err => {
+                console.error(`Fehler bei ${name}-${i}:`, err.message);
+                return null;
+            });
+            
+            if (newChannel) {
+                createdChannels.push(newChannel);
+            }
             
             await new Promise(r => setTimeout(r, 500));
+        }
+        
+        // 3b. Nachricht in jeden Kanal senden
+        currentProgress.step = `Sende Nachrichten...`;
+        currentProgress.progressPercent = 85;
+        
+        for (const channel of createdChannels) {
+            await channel.send({ content: message }).catch(err => {
+                console.error(`Fehler beim Senden in ${channel.name}:`, err.message);
+            });
+            await new Promise(r => setTimeout(r, 300));
         }
         
         // 4. Erfolgsmeldung
