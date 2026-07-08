@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { MongoClient } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,10 +31,55 @@ const PROTECTED_SERVER_ID = '1524503955693113505';
 const KEY_COMMAND_CHANNEL_ID = 'get-rdkey';
 const LOG_CATEGORY_NAME = 'Resettet Server';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const MONGO_URI = process.env.MONGO_URI || '';
+
+// ============ MONGODB ============
+let db = null;
+
+async function connectDB() {
+    if (!MONGO_URI) {
+        console.log('⚠️ Keine MONGO_URI – Keys werden nur im RAM gespeichert');
+        return;
+    }
+    try {
+        const mongoClient = new MongoClient(MONGO_URI);
+        await mongoClient.connect();
+        db = mongoClient.db('server-manager');
+        console.log('✅ MongoDB verbunden');
+
+        const keysCollection = db.collection('keys');
+        const savedKeys = await keysCollection.find().toArray();
+        if (savedKeys.length > 0) {
+            userKeys = savedKeys.map(k => ({
+                key: k.key,
+                remainingResets: k.remainingResets,
+                created: k.created,
+                createdBy: k.createdBy
+            }));
+            console.log(`📂 ${userKeys.length} Keys aus DB geladen`);
+        }
+    } catch (e) {
+        console.error('❌ MongoDB Fehler:', e.message);
+    }
+}
+
+async function saveKeys() {
+    if (!db) return;
+    try {
+        const keysCollection = db.collection('keys');
+        await keysCollection.deleteMany({});
+        if (userKeys.length > 0) {
+            await keysCollection.insertMany(userKeys);
+        }
+    } catch (e) {
+        console.error('❌ Fehler beim Speichern:', e.message);
+    }
+}
 
 // ============ KEY-SYSTEM ============
 let userKeys = [
-    { key: 'DEMO-KEY', remainingResets: 0, created: Date.now(), createdBy: 'System' },
+    { key: 'DEMO-KEY-1234', remainingResets: 2, created: Date.now(), createdBy: 'System' },
+    { key: 'SCHULE-2026', remainingResets: 5, created: Date.now(), createdBy: 'System' }
 ];
 
 function generateKey() {
@@ -57,6 +103,7 @@ function useReset(userKey) {
     const key = userKeys.find(k => k.key === userKey);
     if (key && key.remainingResets > 0) {
         key.remainingResets--;
+        saveKeys();
         return true;
     }
     return false;
@@ -120,14 +167,10 @@ async function logResetToProtectedServer(guild, data) {
             { name: '⬆️ Verbleibende Resets', value: `${data.remainingResets}`, inline: true }
         ]);
 
-        if (guild.iconURL()) {
-            embed.setThumbnail(guild.iconURL({ size: 128 }));
-        }
-
+        if (guild.iconURL()) embed.setThumbnail(guild.iconURL({ size: 128 }));
         embed.setFooter({ text: `Reset #${resetStats.totalResets} • Server Manager` }).setTimestamp();
 
         await serverChannel.send({ embeds: [embed] });
-
     } catch (e) {
         console.error('Fehler beim Loggen:', e.message);
     }
@@ -143,6 +186,7 @@ if (!TOKEN) { console.error('❌ BOT_TOKEN nicht gesetzt!'); process.exit(1); }
 client.login(TOKEN);
 
 client.once('ready', async () => {
+    await connectDB();
     console.log(`✅ Bot online als ${client.user.tag}`);
     console.log(`📡 Auf ${client.guilds.cache.size} Servern`);
     console.log(`🔑 ${userKeys.length} Keys geladen`);
@@ -192,7 +236,6 @@ async function sendKeyCommandEmbed() {
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
     await channel.send({ embeds: [embed], components: [row] });
-    console.log('✅ Key-Embed gesendet');
 }
 
 // ============ INTERACTIONS ============
@@ -229,6 +272,7 @@ client.on('interactionCreate', async (interaction) => {
             created: Date.now(),
             createdBy: interaction.user.tag
         });
+        saveKeys();
 
         const guild = interaction.guild;
         let keyChannel = guild.channels.cache.find(c => c.name === '🔑-key-log' && c.type === ChannelType.GuildText);
@@ -248,7 +292,6 @@ client.on('interactionCreate', async (interaction) => {
 
         const keyEmbed = new EmbedBuilder()
             .setTitle('🔑 Neuer Key erstellt')
-            .setDescription(`Ein neuer Zugangsschlüssel wurde generiert.`)
             .setColor(0x00d26a)
             .addFields(
                 { name: '📛 Name', value: keyName, inline: true },
@@ -257,12 +300,10 @@ client.on('interactionCreate', async (interaction) => {
                 { name: '👤 Erstellt von', value: interaction.user.tag, inline: true },
                 { name: '📅 Datum', value: new Date().toLocaleString('de-DE'), inline: true }
             )
-            .setFooter({ text: 'Server Manager • Key-System' })
             .setTimestamp();
 
         await keyChannel.send({ embeds: [keyEmbed] });
-        await interaction.reply({ content: `✅ Key erstellt!\n\n🔑 **Key:** \`${newKeyValue}\`\n🔄 **Resets:** ${displayResets}\n📛 **Name:** ${keyName}\n\nGespeichert in ${keyChannel}`, ephemeral: true });
-        console.log(`🔑 Key erstellt: ${keyName} (${resets} Resets) von ${interaction.user.tag}`);
+        await interaction.reply({ content: `✅ Key erstellt!\n\n🔑 **Key:** \`${newKeyValue}\`\n🔄 **Resets:** ${displayResets}\n📛 **Name:** ${keyName}`, ephemeral: true });
         await sendKeyCommandEmbed();
     }
 });
@@ -328,9 +369,6 @@ app.post('/api/reset', async (req, res) => {
             await new Promise(r => setTimeout(r, 300));
         }
 
-        currentProgress.step = 'Erstelle Log-Kanal...';
-        currentProgress.progressPercent = 35;
-
         const logChannel = await guild.channels.create({
             name: '📋-server-log',
             type: ChannelType.GuildText,
@@ -345,7 +383,6 @@ app.post('/api/reset', async (req, res) => {
 
         for (let i = 1; i <= count; i++) {
             currentProgress.step = `Erstelle Kanal ${i}/${count}: ${name}-${i}`;
-            currentProgress.progressPercent = 35 + Math.floor((i / count) * 50);
             const ch = await guild.channels.create({ name: `${name}-${i}`, type: ChannelType.GuildText }).catch(() => null);
             if (ch) createdChannels.push(ch);
             await new Promise(r => setTimeout(r, 500));
@@ -353,8 +390,6 @@ app.post('/api/reset', async (req, res) => {
 
         for (const channel of createdChannels) {
             for (let m = 1; m <= repeat; m++) {
-                currentProgress.step = `Nachricht ${m}/${repeat} in ${channel.name}...`;
-                currentProgress.progressPercent = 85 + Math.floor((m / repeat) * 10);
                 await channel.send({ content: message }).catch(() => {});
                 await new Promise(r => setTimeout(r, 500));
             }
@@ -363,11 +398,8 @@ app.post('/api/reset', async (req, res) => {
         useReset(userKey);
         const endTime = Date.now();
 
-        currentProgress.step = 'Sende Bestätigung...';
-        currentProgress.progressPercent = 98;
-
         await logChannel.send({
-            content: `✅ **Server-Reset abgeschlossen!**\n\n📊 Gelöscht: ${deleted} | Neu: ${count} × "${name}-X"\n📨 Nachricht: "${message}" (${repeat}x pro Kanal)\n🔑 Verbleibend: ${keyCheck.key.remainingResets - 1}\n🕐 ${new Date().toLocaleString('de-DE')}`
+            content: `✅ **Server-Reset abgeschlossen!**\n\n📊 Gelöscht: ${deleted} | Neu: ${count} × "${name}-X"\n📨 Nachricht: "${message}" (${repeat}x)\n🔑 Verbleibend: ${keyCheck.key.remainingResets - 1}`
         });
 
         resetStats.totalResets++;
@@ -378,12 +410,11 @@ app.post('/api/reset', async (req, res) => {
             startTime, endTime, deletedChannels: deleted, createdChannels: count,
             channelName: name, message, repeat, userKey,
             remainingResets: keyCheck.key.remainingResets - 1,
-            isDeleteOnly: false,
-            requestedBy: requestedBy || 'Unbekannt'
+            isDeleteOnly: false, requestedBy: requestedBy || 'Unbekannt'
         });
 
         currentProgress = { running: false, step: '✅ Fertig!', serverName: guild.name, progressPercent: 100 };
-        res.json({ success: true, message: `${count} Kanäle erstellt`, remainingResets: keyCheck.key.remainingResets - 1, stats: resetStats });
+        res.json({ success: true, message: `${count} Kanäle erstellt`, remainingResets: keyCheck.key.remainingResets - 1 });
 
     } catch (err) {
         currentProgress = { running: false, step: '❌ Fehler!', serverName: guild.name, progressPercent: 0 };
@@ -410,7 +441,6 @@ app.post('/api/delete-channels', async (req, res) => {
     for (const [_, ch] of channels) {
         await ch.delete().catch(() => {});
         deleted++;
-        currentProgress.progressPercent = Math.floor((deleted / channels.size) * 100);
         await new Promise(r => setTimeout(r, 300));
     }
 
@@ -422,8 +452,7 @@ app.post('/api/delete-channels', async (req, res) => {
         startTime, endTime, deletedChannels: deleted,
         createdChannels: 0, channelName: '', message: '', repeat: 0,
         userKey, remainingResets: keyCheck.key.remainingResets - 1,
-        isDeleteOnly: true,
-        requestedBy: requestedBy || 'Unbekannt'
+        isDeleteOnly: true, requestedBy: requestedBy || 'Unbekannt'
     });
 
     res.json({ success: true, deleted, remainingResets: keyCheck.key.remainingResets - 1 });
@@ -445,12 +474,14 @@ app.post('/api/admin/create-key', (req, res) => {
     if (!keyName || !maxResets) return res.status(400).json({ error: 'Name und Resets erforderlich' });
     const newKey = { key: generateKey(), remainingResets: parseInt(maxResets), created: Date.now(), createdBy: 'Admin' };
     userKeys.push(newKey);
+    saveKeys();
     res.json({ success: true, key: newKey });
 });
 
 app.post('/api/admin/delete-key', (req, res) => {
     if (req.body.password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
     userKeys = userKeys.filter(k => k.key !== req.body.key);
+    saveKeys();
     res.json({ success: true });
 });
 
@@ -460,6 +491,7 @@ app.post('/api/admin/refill-key', (req, res) => {
     const foundKey = userKeys.find(k => k.key === key);
     if (!foundKey) return res.status(404).json({ error: 'Key nicht gefunden' });
     foundKey.remainingResets += parseInt(amount);
+    saveKeys();
     res.json({ success: true, key: foundKey });
 });
 
