@@ -12,12 +12,17 @@ const channelName = document.getElementById('channelName');
 const channelCount = document.getElementById('channelCount');
 const channelCountDisplay = document.getElementById('channelCountDisplay');
 const channelMessage = document.getElementById('channelMessage');
+const messageCount = document.getElementById('messageCount');
+const messageCountDisplay = document.getElementById('messageCountDisplay');
 const resetBtn = document.getElementById('resetBtn');
 const deleteOnlyBtn = document.getElementById('deleteOnlyBtn');
 const progressCard = document.getElementById('progressCard');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
 const historyList = document.getElementById('historyList');
+const apiUrl = document.getElementById('apiUrl');
+
+apiUrl.textContent = API_BASE;
 
 // ============ LOG-SYSTEM ============
 const logContainer = document.getElementById('logContainer');
@@ -49,7 +54,6 @@ function clearLogs() {
 
 clearLogsBtn.addEventListener('click', clearLogs);
 
-// Status-Tracking (nur Änderungen loggen)
 let lastStatus = { online: null, running: null, step: null, serverCount: null, totalResets: null };
 
 async function fetchServerLogs() {
@@ -69,8 +73,8 @@ async function fetchServerLogs() {
             addLog(`⏳ ${d.step} (${d.progressPercent}%)`, 'info', 'api');
         }
         
-        if (d.step?.includes('Sende Nachrichten')) {
-            addLog(`📨 Sende Nachrichten in ${d.serverName || 'Server'}...`, 'info', 'api');
+        if (d.step?.includes('Sende Nachrichten') || d.step?.includes('Nachricht')) {
+            addLog(`📨 ${d.step}`, 'info', 'api');
         }
         
         if (!d.running && lastStatus.running === true) {
@@ -185,7 +189,16 @@ function updateHistory(h) {
 
 async function doReset(del = false) {
     if (!selectedServer) { alert('Bitte wähle einen Server!'); return; }
-    if (!confirm(del ? '⚠️ Wirklich ALLE Kanäle löschen?' : `⚠️ Server zurücksetzen? Alle Kanäle löschen & ${channelCount.value} neue "${channelName.value}-X" erstellen?`)) return;
+    
+    const repeatMsg = parseInt(messageCount.value);
+    const confirmMsg = del 
+        ? '⚠️ Wirklich ALLE Kanäle löschen?' 
+        : `⚠️ Server zurücksetzen?\n\n` +
+          `- ${channelCount.value} Kanäle "${channelName.value}-X"\n` +
+          `- Nachricht: "${channelMessage.value}"\n` +
+          `- ${repeatMsg}x pro Kanal senden`;
+    
+    if (!confirm(confirmMsg)) return;
     
     resetBtn.disabled = true;
     deleteOnlyBtn.disabled = true;
@@ -199,7 +212,8 @@ async function doReset(del = false) {
             serverId: selectedServer,
             channelCount: parseInt(channelCount.value),
             channelName: channelName.value,
-            channelMessage: channelMessage.value
+            channelMessage: channelMessage.value,
+            messageRepeat: parseInt(messageCount.value)
         };
         
         const r = await fetch(API_BASE + '/' + e, {
@@ -227,6 +241,7 @@ async function doReset(del = false) {
 // ============ EVENT LISTENER ============
 serverSelect.addEventListener('change', e => { selectedServer = e.target.value; });
 channelCount.addEventListener('input', e => { channelCountDisplay.textContent = e.target.value; });
+messageCount.addEventListener('input', e => { messageCountDisplay.textContent = e.target.value; });
 resetBtn.addEventListener('click', () => doReset(false));
 deleteOnlyBtn.addEventListener('click', () => doReset(true));
 document.getElementById('refreshServers').addEventListener('click', fetchServers);
@@ -235,7 +250,6 @@ document.getElementById('refreshServers').addEventListener('click', fetchServers
 addLog('🟢 Dashboard geladen', 'system', 'system');
 addLog('🔗 Warte auf Bot-Verbindung...', 'info', 'system');
 
-// Erst schnell pollen, dann langsamer
 fetchStatus();
 fetchServers();
 fetchServerLogs();
@@ -246,7 +260,6 @@ let fastPolling = setInterval(() => {
     fetchServerLogs();
 }, 5000);
 
-// Nach 2 Minuten auf 15 Sekunden umschalten
 setTimeout(() => {
     clearInterval(fastPolling);
     setInterval(fetchStatus, 15000);
