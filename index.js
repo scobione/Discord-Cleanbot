@@ -36,6 +36,139 @@ let currentProgress = {
     progressPercent: 0
 };
 
+
+// ============================================
+// KEY-SYSTEM & ADMIN-PANEL
+// ============================================
+
+// Speicher für Keys (in Produktion durch Datenbank ersetzen!)
+const keyStore = new Map(); // key -> { resetsLeft, createdAt }
+
+// Master-Passwort für Admin-Panel (änderbar)
+const ADMIN_PASSWORD = 'admin123'; // <-- HIER DEIN PASSWORT EINTRAGEN!
+
+// ------------------------------------------------------------
+// 1. KEY GENERIEREN (für Admin-Panel)
+// ------------------------------------------------------------
+function generateKey(resets = 2) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let key = '';
+    for (let i = 0; i < 8; i++) {
+        key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    keyStore.set(key, { resetsLeft: resets, createdAt: Date.now() });
+    return key;
+}
+
+// ------------------------------------------------------------
+// 2. KEY PRÜFEN & VERBRAUCHEN
+// ------------------------------------------------------------
+function useKey(key) {
+    if (!keyStore.has(key)) return { valid: false, reason: 'Key existiert nicht' };
+    
+    const entry = keyStore.get(key);
+    if (entry.resetsLeft <= 0) {
+        keyStore.delete(key); // Aufbrauchen → löschen
+        return { valid: false, reason: 'Key aufgebraucht' };
+    }
+    
+    entry.resetsLeft--;
+    if (entry.resetsLeft === 0) {
+        keyStore.delete(key); // Nach letztem Reset löschen
+    }
+    return { valid: true, remaining: entry.resetsLeft };
+}
+
+// ------------------------------------------------------------
+// 3. ADMIN-PANEL (HTML für Webinterface)
+// ------------------------------------------------------------
+function getAdminPanel() {
+    let keyList = '';
+    keyStore.forEach((entry, key) => {
+        keyList += `
+            <tr>
+                <td><code>${key}</code></td>
+                <td>${entry.resetsLeft}</td>
+                <td>${new Date(entry.createdAt).toLocaleString()}</td>
+                <td><button onclick="deleteKey('${key}')">❌ Löschen</button></td>
+            </tr>
+        `;
+    });
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Cleanbot Admin-Panel</title>
+        <style>
+            body { font-family: Arial; margin: 40px; background: #2c2f33; color: #fff; }
+            .container { max-width: 800px; margin: auto; background: #23272a; padding: 30px; border-radius: 10px; }
+            input, button { padding: 10px; margin: 5px; border-radius: 5px; border: none; }
+            input { background: #40444b; color: #fff; width: 200px; }
+            button { background: #5865f2; color: #fff; cursor: pointer; }
+            button:hover { background: #4752c4; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #40444b; }
+            th { background: #2c2f33; }
+            .delete-btn { background: #ed4245; }
+            .delete-btn:hover { background: #c03537; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔑 Cleanbot Admin-Panel</h1>
+            
+            <div style="margin: 20px 0;">
+                <input type="number" id="resetCount" value="2" min="1" max="999">
+                <button onclick="createKey()">➕ Neuen Key generieren</button>
+            </div>
+            
+            <h3>Vorhandene Keys:</h3>
+            <table>
+                <thead>
+                    <tr><th>Key</th><th>Resets übrig</th><th>Erstellt am</th><th>Aktion</th></tr>
+                </thead>
+                <tbody>
+                    ${keyList || '<tr><td colspan="4">Keine Keys vorhanden</td></tr>'}
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 30px; color: #888; font-size: 0.9em;">
+                <p>💡 Ein Key mit 0 Resets wird automatisch gelöscht.</p>
+            </div>
+        </div>
+
+        <script>
+            function createKey() {
+                const count = document.getElementById('resetCount').value;
+                fetch('/admin/create-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resets: parseInt(count) })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    alert('✅ Neuer Key: ' + data.key);
+                    location.reload();
+                });
+            }
+
+            function deleteKey(key) {
+                if (!confirm('Key ' + key + ' wirklich löschen?')) return;
+                fetch('/admin/delete-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: key })
+                })
+                .then(() => location.reload());
+            }
+        </script>
+    </body>
+    </html>
+    `;
+}
+
 // ============ BOT START ============
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
