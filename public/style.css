@@ -41,3 +41,9 @@
 .log-category.api { background: rgba(108,92,231,0.3); color: #a29bfe; }
 .log-category.bot { background: rgba(0,210,106,0.3); color: #00d26a; }
 .log-category.error { background: rgba(231,76,60,0.3); color: #e74c3c; }
+.textarea {
+    resize: vertical;
+    min-height: 60px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.4;
+}
