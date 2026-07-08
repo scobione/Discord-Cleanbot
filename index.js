@@ -6,15 +6,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serviere das Dashboard direkt mit
+// Dashboard ausliefern
 app.use(express.static('public'));
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.MessageContent
     ]
 });
 
@@ -79,7 +78,7 @@ app.get('/api/servers', (req, res) => {
 
 // Reset ausführen
 app.post('/api/reset', async (req, res) => {
-    const { serverId, channelCount, channelName, keepRoles } = req.body;
+    const { serverId, channelCount, channelName } = req.body;
     
     if (currentProgress.running) {
         return res.status(400).json({ error: 'Ein Reset läuft bereits' });
@@ -102,7 +101,7 @@ app.post('/api/reset', async (req, res) => {
     
     try {
         // 1. Alle löschbaren Kanäle entfernen
-        const deletableChannels = guild.channels.cache.filter(c => c.deletable && c.id !== guild.id);
+        const deletableChannels = guild.channels.cache.filter(c => c.deletable);
         const totalChannels = deletableChannels.size;
         let deleted = 0;
         
@@ -111,7 +110,7 @@ app.post('/api/reset', async (req, res) => {
             deleted++;
             currentProgress.progressPercent = Math.floor((deleted / totalChannels) * 30);
             currentProgress.step = `Lösche Kanal ${deleted}/${totalChannels}...`;
-            await new Promise(r => setTimeout(r, 300)); // Rate-Limit vermeiden
+            await new Promise(r => setTimeout(r, 300));
         }
         
         // 2. Log-Kanal erstellen
@@ -142,7 +141,7 @@ app.post('/api/reset', async (req, res) => {
                 type: ChannelType.GuildText
             }).catch(err => console.error(`Fehler bei ${name}-${i}:`, err.message));
             
-            await new Promise(r => setTimeout(r, 500)); // Rate-Limit
+            await new Promise(r => setTimeout(r, 500));
         }
         
         // 4. Erfolgsmeldung
@@ -162,7 +161,6 @@ app.post('/api/reset', async (req, res) => {
         resetStats.totalResets++;
         resetStats.history.unshift({
             server: guild.name,
-            icon: guild.iconURL({ size: 32 }) || '',
             timestamp: Date.now(),
             channelsCreated: count
         });
@@ -194,22 +192,33 @@ app.post('/api/delete-channels', async (req, res) => {
     const guild = client.guilds.cache.get(serverId);
     if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
     
-    currentProgress = { running: true, step: 'Lösche alle Kanäle...', serverName: guild.name, progressPercent: 0 };
+    currentProgress = {
+        running: true,
+        step: 'Lösche alle Kanäle...',
+        serverName: guild.name,
+        progressPercent: 0
+    };
     
     const channels = guild.channels.cache.filter(c => c.deletable);
-    let i = 0;
+    let deleted = 0;
+    
     for (const [_, ch] of channels) {
         await ch.delete().catch(() => {});
-        i++;
-        currentProgress.progressPercent = Math.floor((i / channels.size) * 100);
+        deleted++;
+        currentProgress.progressPercent = Math.floor((deleted / channels.size) * 100);
+        currentProgress.step = `Kanal ${deleted}/${channels.size} gelöscht...`;
+        await new Promise(r => setTimeout(r, 300));
     }
     
-    currentProgress = { running: false, step: '✅ Alle Kanäle gelöscht', serverName: guild.name, progressPercent: 100 };
-    res.json({ success: true, deleted: i });
+    currentProgress = {
+        running: false,
+        step: '✅ Alle Kanäle gelöscht',
+        serverName: guild.name,
+        progressPercent: 100
+    };
+    
+    res.json({ success: true, deleted: deleted });
 });
-
-// Statische Dateien ausliefern (Dashboard)
-app.use(express.static('public'));
 
 // Port
 const PORT = process.env.PORT || 3000;
