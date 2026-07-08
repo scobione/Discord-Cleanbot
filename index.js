@@ -40,7 +40,7 @@ const client = new Client({
         GatewayIntentBits.MessageContent
     ]
 });
-
+ 
 let resetStats = {
     totalResets: 0,
     history: []
