@@ -136,10 +136,10 @@ app.post('/api/reset', async (req, res) => {
         });
         
         // 3. Neue Kanäle erstellen
-        const count = Math.min(parseInt(channelCount) || 5, 50);
+        const count = Math.min(parseInt(channelCount) || 5, 100);
         const name = channelName || 'kanal';
         const message = channelMessage || '✅ Kanal funktioniert einwandfrei!';
-        const repeat = Math.min(parseInt(messageRepeat) || 1, 10);
+        const repeat = Math.min(parseInt(messageRepeat) || 1, 100);
         const createdChannels = [];
         
         for (let i = 1; i <= count; i++) {
