@@ -117,19 +117,21 @@ document.getElementById('refreshServers').addEventListener('click',fetchServers)
 
 fetchStatus();
 fetchServers();
-setInterval(fetchStatus,3000);// ============ LOG-SYSTEM ============
+setInterval(fetchStatus,3000);
+
+// ============ LOG-SYSTEM ============
 const logContainer = document.getElementById('logContainer');
 const clearLogsBtn = document.getElementById('clearLogs');
 let logEntries = [];
 
 function addLog(message, type = 'info', category = 'system') {
     const timestamp = new Date().toLocaleTimeString('de-DE');
-    const logEntry = { timestamp, message, type, category };
-    logEntries.unshift(logEntry);
     
-    // Max 100 Einträge behalten
+    // Doppelte Einträge vermeiden
+    if (logEntries.length > 0 && logEntries[0].message === message) return;
+    
+    logEntries.unshift({ timestamp, message, type, category });
     if (logEntries.length > 100) logEntries.pop();
-    
     renderLogs();
 }
 
@@ -150,45 +152,48 @@ function clearLogs() {
 
 clearLogsBtn.addEventListener('click', clearLogs);
 
-// Logs vom Server abrufen
+// Status-Tracking (nur Änderungen loggen)
+let lastStatus = { online: null, running: null, step: null, serverCount: null, totalResets: null };
+
 async function fetchServerLogs() {
     try {
         const r = await fetch(API_BASE + '/status');
         const d = await r.json();
         
-        // Bot-Status loggen
-        if (d.online) {
-            addLog(`Bot online: ${d.username}`, 'success', 'bot');
-            addLog(`${d.serverCount} Server verbunden`, 'info', 'bot');
+        if (d.online !== lastStatus.online) {
+            addLog(d.online ? `✅ Bot online: ${d.username}` : '❌ Bot offline', d.online ? 'success' : 'error', 'bot');
         }
         
-        // Fortschritt loggen
-        if (d.running && d.step) {
-            addLog(d.step + ` (${d.progressPercent}%)`, 'info', 'api');
+        if (d.serverCount !== lastStatus.serverCount) {
+            addLog(`📡 ${d.serverCount} Server mit Admin-Rechten`, 'info', 'bot');
         }
         
-        if (d.step?.includes('Fertig')) {
-            addLog('✅ Reset abgeschlossen!', 'success', 'api');
+        if (d.running && d.step !== lastStatus.step) {
+            addLog(`⏳ ${d.step} (${d.progressPercent}%)`, 'info', 'api');
         }
         
-        if (d.step?.includes('Fehler')) {
-            addLog('❌ Fehler beim Reset', 'error', 'error');
+        if (!d.running && lastStatus.running === true) {
+            addLog('✅ Reset erfolgreich abgeschlossen!', 'success', 'api');
         }
         
-        // Stats loggen
-        if (d.stats?.totalResets > 0) {
-            addLog(`Resets insgesamt: ${d.stats.totalResets}`, 'info', 'bot');
+        if (d.stats?.totalResets !== lastStatus.totalResets && d.stats?.totalResets > 0) {
+            addLog(`🔄 Reset #${d.stats.totalResets} durchgeführt`, 'success', 'bot');
         }
+        
+        lastStatus = { online: d.online, running: d.running, step: d.step, serverCount: d.serverCount, totalResets: d.stats?.totalResets };
         
     } catch (e) {
-        addLog('Keine Verbindung zum Server', 'error', 'error');
+        if (lastStatus.online !== false) {
+            addLog('⚠️ Server nicht erreichbar', 'warning', 'system');
+        }
+        lastStatus.online = false;
     }
 }
 
 // Initiale Logs
-addLog('Dashboard geladen', 'system', 'system');
-addLog('Verbinde mit Server...', 'info', 'system');
+addLog('🟢 Dashboard geladen', 'system', 'system');
+addLog('🔗 Warte auf Bot-Verbindung...', 'info', 'system');
 
-// Log-Polling alle 5 Sekunden
-setInterval(fetchServerLogs, 5000);
+// Alle 10 Sekunden checken (reicht völlig)
+setInterval(fetchServerLogs, 10000);
 fetchServerLogs();
