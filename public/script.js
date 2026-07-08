@@ -15,6 +15,7 @@ const progressCard=document.getElementById('progressCard');
 const progressFill=document.getElementById('progressFill');
 const progressText=document.getElementById('progressText');
 const historyList=document.getElementById('historyList');
+const channelMessage = document.getElementById('channelMessage');
 
 async function fetchStatus(){
     try{
