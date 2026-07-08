@@ -208,6 +208,9 @@ app.post('/api/delete-channels', async (req, res) => {
     res.json({ success: true, deleted: i });
 });
 
+// Statische Dateien ausliefern (Dashboard)
+app.use(express.static('public'));
+
 // Port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
