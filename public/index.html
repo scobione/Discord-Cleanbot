@@ -1,5 +1,18 @@
 <!DOCTYPE html>
 <html lang="de">
+    
+<!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="logo" style="font-size:3rem;text-align:center;">🔐</div>
+            <h2 style="text-align:center;margin:16px 0;">Zugang erforderlich</h2>
+            <input type="text" id="userKeyInput" class="input" placeholder="Dein Key (z.B. DEMO-KEY-1234)" style="text-align:center;font-size:1.1rem;">
+            <button id="loginBtn" class="btn btn-primary">🔓 Einloggen</button>
+            <p id="loginError" style="color:#e74c3c;text-align:center;display:none;margin-top:8px;"></p>
+            <p style="text-align:center;margin-top:12px;font-size:0.7rem;color:var(--muted);">Kein Key? Frage deinen Admin.</p>
+        </div>
+    </div>
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
