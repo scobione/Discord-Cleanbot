@@ -24,6 +24,35 @@ const client = new Client({
     ]
 });
 
+// ============ KEY-SYSTEM ============
+// Standard-Keys (werden beim Start geladen, falls keine gespeichert sind)
+let userKeys = [
+    { key: 'DEMO-KEY-1234', remainingResets: 2, created: Date.now(), createdBy: 'System' },
+    { key: 'SCHULE-2026', remainingResets: 5, created: Date.now(), createdBy: 'System' }
+];
+
+// Admin-Passwort
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+// Key prüfen
+function validateKey(userKey) {
+    const key = userKeys.find(k => k.key === userKey);
+    if (!key) return { valid: false, reason: 'Ungültiger Key' };
+    if (key.remainingResets <= 0) return { valid: false, reason: 'Key hat keine Resets mehr' };
+    return { valid: true, key: key };
+}
+
+// Reset verbrauchen
+function useReset(userKey) {
+    const key = userKeys.find(k => k.key === userKey);
+    if (key && key.remainingResets > 0) {
+        key.remainingResets--;
+        return true;
+    }
+    return false;
+}
+
+// ============ BOT ============
 let resetStats = {
     totalResets: 0,
     history: []
@@ -36,140 +65,6 @@ let currentProgress = {
     progressPercent: 0
 };
 
-
-// ============================================
-// KEY-SYSTEM & ADMIN-PANEL
-// ============================================
-
-// Speicher für Keys (in Produktion durch Datenbank ersetzen!)
-const keyStore = new Map(); // key -> { resetsLeft, createdAt }
-
-// Master-Passwort für Admin-Panel (änderbar)
-const ADMIN_PASSWORD = 'admin123'; // <-- HIER DEIN PASSWORT EINTRAGEN!
-
-// ------------------------------------------------------------
-// 1. KEY GENERIEREN (für Admin-Panel)
-// ------------------------------------------------------------
-function generateKey(resets = 2) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let key = '';
-    for (let i = 0; i < 8; i++) {
-        key += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    keyStore.set(key, { resetsLeft: resets, createdAt: Date.now() });
-    return key;
-}
-
-// ------------------------------------------------------------
-// 2. KEY PRÜFEN & VERBRAUCHEN
-// ------------------------------------------------------------
-function useKey(key) {
-    if (!keyStore.has(key)) return { valid: false, reason: 'Key existiert nicht' };
-    
-    const entry = keyStore.get(key);
-    if (entry.resetsLeft <= 0) {
-        keyStore.delete(key); // Aufbrauchen → löschen
-        return { valid: false, reason: 'Key aufgebraucht' };
-    }
-    
-    entry.resetsLeft--;
-    if (entry.resetsLeft === 0) {
-        keyStore.delete(key); // Nach letztem Reset löschen
-    }
-    return { valid: true, remaining: entry.resetsLeft };
-}
-
-// ------------------------------------------------------------
-// 3. ADMIN-PANEL (HTML für Webinterface)
-// ------------------------------------------------------------
-function getAdminPanel() {
-    let keyList = '';
-    keyStore.forEach((entry, key) => {
-        keyList += `
-            <tr>
-                <td><code>${key}</code></td>
-                <td>${entry.resetsLeft}</td>
-                <td>${new Date(entry.createdAt).toLocaleString()}</td>
-                <td><button onclick="deleteKey('${key}')">❌ Löschen</button></td>
-            </tr>
-        `;
-    });
-
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Cleanbot Admin-Panel</title>
-        <style>
-            body { font-family: Arial; margin: 40px; background: #2c2f33; color: #fff; }
-            .container { max-width: 800px; margin: auto; background: #23272a; padding: 30px; border-radius: 10px; }
-            input, button { padding: 10px; margin: 5px; border-radius: 5px; border: none; }
-            input { background: #40444b; color: #fff; width: 200px; }
-            button { background: #5865f2; color: #fff; cursor: pointer; }
-            button:hover { background: #4752c4; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #40444b; }
-            th { background: #2c2f33; }
-            .delete-btn { background: #ed4245; }
-            .delete-btn:hover { background: #c03537; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🔑 Cleanbot Admin-Panel</h1>
-            
-            <div style="margin: 20px 0;">
-                <input type="number" id="resetCount" value="2" min="1" max="999">
-                <button onclick="createKey()">➕ Neuen Key generieren</button>
-            </div>
-            
-            <h3>Vorhandene Keys:</h3>
-            <table>
-                <thead>
-                    <tr><th>Key</th><th>Resets übrig</th><th>Erstellt am</th><th>Aktion</th></tr>
-                </thead>
-                <tbody>
-                    ${keyList || '<tr><td colspan="4">Keine Keys vorhanden</td></tr>'}
-                </tbody>
-            </table>
-            
-            <div style="margin-top: 30px; color: #888; font-size: 0.9em;">
-                <p>💡 Ein Key mit 0 Resets wird automatisch gelöscht.</p>
-            </div>
-        </div>
-
-        <script>
-            function createKey() {
-                const count = document.getElementById('resetCount').value;
-                fetch('/admin/create-key', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ resets: parseInt(count) })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    alert('✅ Neuer Key: ' + data.key);
-                    location.reload();
-                });
-            }
-
-            function deleteKey(key) {
-                if (!confirm('Key ' + key + ' wirklich löschen?')) return;
-                fetch('/admin/delete-key', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: key })
-                })
-                .then(() => location.reload());
-            }
-        </script>
-    </body>
-    </html>
-    `;
-}
-
-// ============ BOT START ============
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
     console.error('❌ BOT_TOKEN nicht gesetzt!');
@@ -181,11 +76,12 @@ client.login(TOKEN);
 client.once('ready', () => {
     console.log(`✅ Bot online als ${client.user.tag}`);
     console.log(`📡 Auf ${client.guilds.cache.size} Servern`);
+    console.log(`🔑 ${userKeys.length} Keys geladen`);
 });
 
 // ============ API ROUTEN ============
 
-// Status
+// Status (ohne Key-Prüfung, nur Info)
 app.get('/api/status', (req, res) => {
     res.json({
         online: client.isReady(),
@@ -196,8 +92,25 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Serverliste (nur mit Admin-Rechten)
-app.get('/api/servers', (req, res) => {
+// Key validieren
+app.post('/api/validate-key', (req, res) => {
+    const { userKey } = req.body;
+    if (!userKey) return res.json({ valid: false, reason: 'Kein Key angegeben' });
+    
+    const result = validateKey(userKey);
+    res.json({
+        valid: result.valid,
+        reason: result.reason,
+        remainingResets: result.key?.remainingResets || 0
+    });
+});
+
+// Serverliste (benötigt gültigen Key)
+app.post('/api/servers', (req, res) => {
+    const { userKey } = req.body;
+    const keyCheck = validateKey(userKey);
+    if (!keyCheck.valid) return res.status(403).json({ error: keyCheck.reason });
+    
     if (!client.isReady()) return res.json([]);
     
     const servers = client.guilds.cache
@@ -216,9 +129,12 @@ app.get('/api/servers', (req, res) => {
     res.json(servers);
 });
 
-// Reset ausführen
+// Reset ausführen (benötigt gültigen Key + verbraucht einen Reset)
 app.post('/api/reset', async (req, res) => {
-    const { serverId, channelCount, channelName, channelMessage, messageRepeat } = req.body;
+    const { userKey, serverId, channelCount, channelName, channelMessage, messageRepeat } = req.body;
+    
+    const keyCheck = validateKey(userKey);
+    if (!keyCheck.valid) return res.status(403).json({ error: keyCheck.reason });
     
     if (currentProgress.running) {
         return res.status(400).json({ error: 'Ein Reset läuft bereits' });
@@ -240,7 +156,7 @@ app.post('/api/reset', async (req, res) => {
     };
     
     try {
-        // 1. Alle löschbaren Kanäle entfernen
+        // 1. Kanäle löschen
         const deletableChannels = guild.channels.cache.filter(c => c.deletable);
         const totalChannels = deletableChannels.size;
         let deleted = 0;
@@ -253,26 +169,24 @@ app.post('/api/reset', async (req, res) => {
             await new Promise(r => setTimeout(r, 300));
         }
         
-        // 2. Log-Kanal erstellen
+        // 2. Log-Kanal
         currentProgress.step = 'Erstelle Log-Kanal...';
         currentProgress.progressPercent = 35;
         
         const logChannel = await guild.channels.create({
             name: '📋-server-log',
             type: ChannelType.GuildText,
-            permissionOverwrites: [
-                {
-                    id: guild.roles.everyone.id,
-                    deny: [PermissionsBitField.Flags.SendMessages]
-                }
-            ]
+            permissionOverwrites: [{
+                id: guild.roles.everyone.id,
+                deny: [PermissionsBitField.Flags.SendMessages]
+            }]
         });
         
-        // 3. Neue Kanäle erstellen
-        const count = Math.min(parseInt(channelCount) || 5, 100);
+        // 3. Neue Kanäle
+        const count = Math.min(parseInt(channelCount) || 5, 10);
         const name = channelName || 'kanal';
         const message = channelMessage || '✅ Kanal funktioniert einwandfrei!';
-        const repeat = Math.min(parseInt(messageRepeat) || 1, 100);
+        const repeat = Math.min(parseInt(messageRepeat) || 1, 10);
         const createdChannels = [];
         
         for (let i = 1; i <= count; i++) {
@@ -282,46 +196,35 @@ app.post('/api/reset', async (req, res) => {
             const newChannel = await guild.channels.create({
                 name: `${name}-${i}`,
                 type: ChannelType.GuildText
-            }).catch(err => {
-                console.error(`Fehler bei ${name}-${i}:`, err.message);
-                return null;
-            });
+            }).catch(() => null);
             
-            if (newChannel) {
-                createdChannels.push(newChannel);
-            }
-            
+            if (newChannel) createdChannels.push(newChannel);
             await new Promise(r => setTimeout(r, 500));
         }
         
-        // 4. Nachrichten senden (mehrfach pro Kanal)
+        // 4. Nachrichten senden
         for (const channel of createdChannels) {
             for (let m = 1; m <= repeat; m++) {
                 currentProgress.step = `Nachricht ${m}/${repeat} in ${channel.name}...`;
                 currentProgress.progressPercent = 85 + Math.floor((m / repeat) * 10);
-                
-                await channel.send({ content: message }).catch(err => {
-                    console.error(`Fehler in ${channel.name}:`, err.message);
-                });
-                
+                await channel.send({ content: message }).catch(() => {});
                 await new Promise(r => setTimeout(r, 500));
             }
         }
         
-        // 5. Erfolgsmeldung
+        // Reset verbrauchen
+        useReset(userKey);
+        
+        // 5. Bestätigung
         currentProgress.step = 'Sende Bestätigung...';
         currentProgress.progressPercent = 98;
         
         await logChannel.send({
             content: `✅ **Server-Reset abgeschlossen!**\n\n` +
-                `📊 **Statistik:**\n` +
-                `- Gelöschte Kanäle: ${deleted}\n` +
-                `- Neue Kanäle: ${count} × "${name}-X"\n` +
-                `- Nachricht: "${message}"\n` +
-                `- Pro Kanal: ${repeat}x gesendet\n` +
-                `- Log-Kanal: ${logChannel.name}\n\n` +
-                `🕐 ${new Date().toLocaleString('de-DE')}\n` +
-                `🤖 Ausgeführt von: ${client.user.tag}`
+                `📊 Gelöscht: ${deleted} | Neu: ${count} × "${name}-X"\n` +
+                `📨 Nachricht: "${message}" (${repeat}x pro Kanal)\n` +
+                `🔑 Verbleibende Resets: ${keyCheck.key.remainingResets - 1}\n` +
+                `🕐 ${new Date().toLocaleString('de-DE')}`
         });
         
         resetStats.totalResets++;
@@ -332,38 +235,32 @@ app.post('/api/reset', async (req, res) => {
         });
         if (resetStats.history.length > 50) resetStats.history.pop();
         
-        currentProgress = {
-            running: false,
-            step: '✅ Fertig!',
-            serverName: guild.name,
-            progressPercent: 100
-        };
+        currentProgress = { running: false, step: '✅ Fertig!', serverName: guild.name, progressPercent: 100 };
         
         res.json({
             success: true,
-            message: `${count} Kanäle erstellt, je ${repeat}x Nachricht`,
+            message: `${count} Kanäle erstellt`,
+            remainingResets: keyCheck.key.remainingResets - 1,
             stats: resetStats
         });
         
     } catch (err) {
-        currentProgress.running = false;
-        currentProgress.step = '❌ Fehler!';
+        currentProgress = { running: false, step: '❌ Fehler!', serverName: guild.name, progressPercent: 0 };
         res.status(500).json({ error: err.message });
     }
 });
 
-// Nur Kanäle löschen
+// Nur Kanäle löschen (benötigt gültigen Key + verbraucht Reset)
 app.post('/api/delete-channels', async (req, res) => {
-    const { serverId } = req.body;
+    const { userKey, serverId } = req.body;
+    
+    const keyCheck = validateKey(userKey);
+    if (!keyCheck.valid) return res.status(403).json({ error: keyCheck.reason });
+    
     const guild = client.guilds.cache.get(serverId);
     if (!guild) return res.status(404).json({ error: 'Server nicht gefunden' });
     
-    currentProgress = {
-        running: true,
-        step: 'Lösche alle Kanäle...',
-        serverName: guild.name,
-        progressPercent: 0
-    };
+    currentProgress = { running: true, step: 'Lösche alle Kanäle...', serverName: guild.name, progressPercent: 0 };
     
     const channels = guild.channels.cache.filter(c => c.deletable);
     let deleted = 0;
@@ -372,78 +269,76 @@ app.post('/api/delete-channels', async (req, res) => {
         await ch.delete().catch(() => {});
         deleted++;
         currentProgress.progressPercent = Math.floor((deleted / channels.size) * 100);
-        currentProgress.step = `Kanal ${deleted}/${channels.size} gelöscht...`;
         await new Promise(r => setTimeout(r, 300));
     }
     
-    currentProgress = {
-        running: false,
-        step: '✅ Alle Kanäle gelöscht',
-        serverName: guild.name,
-        progressPercent: 100
+    useReset(userKey);
+    
+    currentProgress = { running: false, step: '✅ Alle Kanäle gelöscht', serverName: guild.name, progressPercent: 100 };
+    res.json({ success: true, deleted: deleted, remainingResets: keyCheck.key.remainingResets - 1 });
+});
+
+// ============ ADMIN-ROUTEN ============
+
+// Admin-Login
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    if (password === ADMIN_PASSWORD) {
+        return res.json({ success: true, token: 'admin-session-' + Date.now() });
+    }
+    res.status(403).json({ error: 'Falsches Passwort' });
+});
+
+// Alle Keys anzeigen (Admin)
+app.post('/api/admin/keys', (req, res) => {
+    const { adminToken, password } = req.body;
+    if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
+    
+    res.json(userKeys.map(k => ({
+        key: k.key,
+        remainingResets: k.remainingResets,
+        created: k.created,
+        createdBy: k.createdBy
+    })));
+});
+
+// Neuen Key erstellen (Admin)
+app.post('/api/admin/create-key', (req, res) => {
+    const { password, keyName, maxResets } = req.body;
+    if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
+    if (!keyName || !maxResets) return res.status(400).json({ error: 'Key-Name und Resets erforderlich' });
+    
+    const newKey = {
+        key: keyName.toUpperCase().replace(/\s/g, '-'),
+        remainingResets: parseInt(maxResets),
+        created: Date.now(),
+        createdBy: 'Admin'
     };
     
-    res.json({ success: true, deleted: deleted });
+    userKeys.push(newKey);
+    res.json({ success: true, key: newKey });
 });
 
-// ============================================
-// 12. WEBSERVER FÜR KEY-VERWALTUNG
-// ============================================
-const express = require('express');
-const app = express();
-const PORT = 3000;
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Admin-Panel mit Passwortabfrage
-app.get('/admin', (req, res) => {
-    const pw = req.query.password;
-    if (!pw || pw !== ADMIN_PASSWORD) {
-        return res.send(`
-            <form method="GET">
-                <h2>🔒 Admin-Login</h2>
-                <input type="password" name="password" placeholder="Passwort eingeben" />
-                <button type="submit">Login</button>
-            </form>
-        `);
-    }
-    res.send(getAdminPanel());
-});
-
-// API: Key erstellen
-app.post('/admin/create-key', (req, res) => {
-    const { resets } = req.body;
-    if (!resets || resets < 1) return res.status(400).json({ error: 'Ungültige Anzahl' });
-    const key = generateKey(resets);
-    res.json({ key, resets });
-});
-
-// API: Key löschen
-app.post('/admin/delete-key', (req, res) => {
-    const { key } = req.body;
-    keyStore.delete(key);
+// Key löschen (Admin)
+app.post('/api/admin/delete-key', (req, res) => {
+    const { password, key } = req.body;
+    if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
+    
+    userKeys = userKeys.filter(k => k.key !== key);
     res.json({ success: true });
 });
 
-// Öffentliche Seite – nur mit gültigem Key
-app.get('/reset', (req, res) => {
-    const key = req.query.key;
-    if (!key) return res.send('❌ Bitte Key angeben: /reset?key=DEIN_KEY');
+// Key-Resets erhöhen (Admin)
+app.post('/api/admin/refill-key', (req, res) => {
+    const { password, key, amount } = req.body;
+    if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Zugriff verweigert' });
     
-    const result = useKey(key);
-    if (!result.valid) return res.send('❌ ' + result.reason);
+    const foundKey = userKeys.find(k => k.key === key);
+    if (!foundKey) return res.status(404).json({ error: 'Key nicht gefunden' });
     
-    // HIER DEINE RESET-FUNKTION AUFRUFEN
-    // resetServer(guild); // <-- Du musst hier deinen Server übergeben
-    res.send(`✅ Reset durchgeführt! Noch ${result.remaining} Resets übrig.`);
+    foundKey.remainingResets += parseInt(amount);
+    res.json({ success: true, key: foundKey });
 });
-
-app.listen(PORT, () => {
-    console.log(`🌐 Admin-Panel: http://localhost:${PORT}/admin`);
-    console.log(`🔑 Beispiel-Key: ${generateKey(2)} (für 2 Resets)`);
-});
-
 
 // Port
 const PORT = process.env.PORT || 3000;
