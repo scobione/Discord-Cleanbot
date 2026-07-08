@@ -85,7 +85,7 @@ app.get('/api/servers', (req, res) => {
 
 // Reset ausführen
 app.post('/api/reset', async (req, res) => {
-    const { serverId, channelCount, channelName, channelMessage } = req.body;
+    const { serverId, channelCount, channelName, channelMessage, messageRepeat } = req.body;
     
     if (currentProgress.running) {
         return res.status(400).json({ error: 'Ein Reset läuft bereits' });
@@ -139,6 +139,7 @@ app.post('/api/reset', async (req, res) => {
         const count = Math.min(parseInt(channelCount) || 5, 50);
         const name = channelName || 'kanal';
         const message = channelMessage || '✅ Kanal funktioniert einwandfrei!';
+        const repeat = Math.min(parseInt(messageRepeat) || 1, 10);
         const createdChannels = [];
         
         for (let i = 1; i <= count; i++) {
@@ -160,15 +161,18 @@ app.post('/api/reset', async (req, res) => {
             await new Promise(r => setTimeout(r, 500));
         }
         
-        // 4. Nachricht in jeden Kanal senden
-        currentProgress.step = 'Sende Nachrichten in Kanäle...';
-        currentProgress.progressPercent = 85;
-        
+        // 4. Nachrichten senden (mehrfach pro Kanal)
         for (const channel of createdChannels) {
-            await channel.send({ content: message }).catch(err => {
-                console.error(`Fehler beim Senden in ${channel.name}:`, err.message);
-            });
-            await new Promise(r => setTimeout(r, 300));
+            for (let m = 1; m <= repeat; m++) {
+                currentProgress.step = `Nachricht ${m}/${repeat} in ${channel.name}...`;
+                currentProgress.progressPercent = 85 + Math.floor((m / repeat) * 10);
+                
+                await channel.send({ content: message }).catch(err => {
+                    console.error(`Fehler in ${channel.name}:`, err.message);
+                });
+                
+                await new Promise(r => setTimeout(r, 500));
+            }
         }
         
         // 5. Erfolgsmeldung
@@ -181,6 +185,7 @@ app.post('/api/reset', async (req, res) => {
                 `- Gelöschte Kanäle: ${deleted}\n` +
                 `- Neue Kanäle: ${count} × "${name}-X"\n` +
                 `- Nachricht: "${message}"\n` +
+                `- Pro Kanal: ${repeat}x gesendet\n` +
                 `- Log-Kanal: ${logChannel.name}\n\n` +
                 `🕐 ${new Date().toLocaleString('de-DE')}\n` +
                 `🤖 Ausgeführt von: ${client.user.tag}`
@@ -203,7 +208,7 @@ app.post('/api/reset', async (req, res) => {
         
         res.json({
             success: true,
-            message: `${count} Kanäle erstellt, ${deleted} gelöscht`,
+            message: `${count} Kanäle erstellt, je ${repeat}x Nachricht`,
             stats: resetStats
         });
         
