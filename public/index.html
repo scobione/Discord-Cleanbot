@@ -1,19 +1,5 @@
 <!DOCTYPE html>
 <html lang="de">
-    
-<!-- LOGIN SCREEN -->
-    <div id="loginScreen" class="login-screen">
-        <div class="login-card">
-            <div class="logo" style="font-size:3rem;text-align:center;">🔐</div>
-            <h2 style="text-align:center;margin:16px 0;">Zugang erforderlich</h2>
-            <input type="text" id="userKeyInput" class="input" placeholder="Dein Key (z.B. DEMO-KEY)" style="text-align:center;font-size:1.1rem;">
-            
-            <button id="loginBtn" class="btn btn-primary">🔓 Einloggen</button>
-            <p id="loginError" style="color:#e74c3c;text-align:center;display:none;margin-top:8px;"></p>
-            <p style="text-align:center;margin-top:12px;font-size:0.7rem;color:var(--muted);">Kein Key? Frage deinen Admin.</p>
-        </div>
-    </div>
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -21,11 +7,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Server Manager">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5968/5968756.png">
-    <button id="adminBtn" class="btn btn-secondary" style="width:auto;padding:8px 12px;font-size:0.8rem;margin-left:auto;" title="Admin-Menü">👑</button>
     <title>Discord Server Manager</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="logo" style="font-size:3rem;text-align:center;">🔐</div>
+            <h2 style="text-align:center;margin:16px 0;">Zugang erforderlich</h2>
+            <input type="text" id="userKeyInput" class="input" placeholder="Dein Key (z.B. DEMO-KEY-1234)" style="text-align:center;font-size:1.1rem;">
+            <button id="loginBtn" class="btn btn-primary">🔓 Einloggen</button>
+            <p id="loginError" style="color:#e74c3c;text-align:center;display:none;margin-top:8px;"></p>
+            <p style="text-align:center;margin-top:12px;font-size:0.7rem;color:var(--muted);">Kein Key? Frage deinen Admin.</p>
+        </div>
+    </div>
+
     <div class="app">
         <header class="header">
             <div class="logo">🎬</div>
@@ -34,86 +31,62 @@
                 <span id="connectionStatus" class="status-text">Verbinde...</span>
             </div>
             <div id="statusDot" class="status-dot offline"></div>
+            <button id="adminBtn" class="btn btn-secondary" style="width:auto;padding:8px 12px;font-size:0.8rem;" title="Admin-Menü">👑</button>
         </header>
 
         <div class="stats-row">
-            <div class="stat-card">
-                <span class="stat-label">Server</span>
-                <span class="stat-value" id="serverCount">0</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Resets</span>
-                <span class="stat-value" id="resetCount">0</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Status</span>
-                <span class="stat-value" id="progressLabel">Bereit</span>
-            </div>
+            <div class="stat-card"><span class="stat-label">Server</span><span class="stat-value" id="serverCount">0</span></div>
+            <div class="stat-card"><span class="stat-label">Resets</span><span class="stat-value" id="resetCount">0</span></div>
+            <div class="stat-card"><span class="stat-label">Status</span><span class="stat-value" id="progressLabel">Bereit</span></div>
         </div>
 
         <div class="card">
             <h2>📡 Server auswählen</h2>
             <p class="hint">Nur Server mit Admin-Rechten</p>
-            <select id="serverSelect" class="select">
-                <option value="">-- Lade Server... --</option>
-            </select>
+            <select id="serverSelect" class="select"><option value="">-- Lade Server... --</option></select>
             <button id="refreshServers" class="btn btn-secondary">🔄 Aktualisieren</button>
         </div>
 
         <div class="card">
             <h2>⚙️ Reset konfigurieren</h2>
-            
             <label for="channelName">Kanalname</label>
             <input type="text" id="channelName" class="input" value="dreh" placeholder="z.B. dreh, szene">
             <p class="hint">Kanäle heißen: dreh-1, dreh-2, ...</p>
-            
             <label for="channelCount">Anzahl Kanäle</label>
             <div class="slider-row">
-                <input type="range" id="channelCount" class="slider" min="1" max="500" value="5">
+                <input type="range" id="channelCount" class="slider" min="1" max="10" value="5">
                 <span id="channelCountDisplay" class="slider-value">5</span>
             </div>
-            
             <label for="channelMessage">Nachricht in jeden Kanal</label>
             <textarea id="channelMessage" class="input textarea" rows="3" placeholder="Deine Nachricht...">✅ Kanal funktioniert einwandfrei!</textarea>
-            
             <label for="messageCount">Nachrichten pro Kanal</label>
             <div class="slider-row">
-                <input type="range" id="messageCount" class="slider" min="1" max="100" value="1">
+                <input type="range" id="messageCount" class="slider" min="1" max="10" value="1">
                 <span id="messageCountDisplay" class="slider-value">1</span>
             </div>
             <p class="hint">Wie oft soll die Nachricht in JEDEN Kanal gesendet werden?</p>
-            
             <button id="resetBtn" class="btn btn-primary">🔄 Server zurücksetzen</button>
             <button id="deleteOnlyBtn" class="btn btn-danger">🗑️ Nur Kanäle löschen</button>
         </div>
 
         <div class="card" id="progressCard" style="display:none;">
             <h2>⏳ Fortschritt</h2>
-            <div class="progress-bar">
-                <div id="progressFill" class="progress-fill"></div>
-            </div>
+            <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
             <p id="progressText" class="progress-text">Bereit...</p>
         </div>
 
         <div class="card" id="logCard">
             <h2>📜 Live-Log</h2>
-            <div id="logContainer" class="log-container">
-                <div class="log-entry log-system">🟢 Warte auf Verbindung...</div>
-            </div>
+            <div id="logContainer" class="log-container"><div class="log-entry log-system">🟢 Warte auf Verbindung...</div></div>
             <button id="clearLogs" class="btn btn-secondary" style="margin-top:8px;">🗑️ Logs leeren</button>
         </div>
 
         <div class="card">
             <h2>📋 Verlauf</h2>
-            <div id="historyList" class="history-list">
-                <p class="empty-text">Noch keine Resets</p>
-            </div>
+            <div id="historyList" class="history-list"><p class="empty-text">Noch keine Resets</p></div>
         </div>
 
-        <footer class="footer">
-            <p>🔒 Nur für eigene Server • Schulprojekt</p>
-            <p id="apiUrl" class="api-url"></p>
-        </footer>
+        <footer class="footer"><p>🔒 Nur für eigene Server • Schulprojekt</p><p id="apiUrl" class="api-url"></p></footer>
     </div>
     <script src="script.js"></script>
 </body>
