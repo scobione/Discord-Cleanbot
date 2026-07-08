@@ -1,8 +1,9 @@
 {
-  "name": "discord-server-manager",
+  "name": "discord-cleanbot",
   "version": "1.0.0",
-  "description": "Server-Manager für Schulprojekt",
+  "description": "Discord Server Manager",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
