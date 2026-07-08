@@ -16,6 +16,12 @@ const progressFill=document.getElementById('progressFill');
 const progressText=document.getElementById('progressText');
 const historyList=document.getElementById('historyList');
 const channelMessage = document.getElementById('channelMessage');
+const b = del ? {serverId: selectedServer} : {
+    serverId: selectedServer,
+    channelCount: parseInt(channelCount.value),
+    channelName: channelName.value,
+    channelMessage: channelMessage.value   // ← NEU
+};
 
 async function fetchStatus(){
     try{
