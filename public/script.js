@@ -187,6 +187,10 @@ async function fetchServerLogs() {
             addLog(`🔄 Reset #${d.stats.totalResets} durchgeführt`, 'success', 'bot');
         }
         
+        if (d.step?.includes('Sende Nachrichten')) {
+            addLog(`📨 Sende Nachrichten in ${d.serverName || 'Server'}...`, 'info', 'api');
+        }
+        
         lastStatus = { online: d.online, running: d.running, step: d.step, serverCount: d.serverCount, totalResets: d.stats?.totalResets };
         
     } catch (e) {
