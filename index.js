@@ -56,7 +56,7 @@ function saveVerifyData() {
 
 // ============ KEY-SYSTEM ============
 let userKeys = [
-    { key: 'DEMO-KEY', remainingResets: 0, created: Date.now(), createdBy: 'System' },
+    { key: 'DEMO-KEY', remainingResets: 0.1, created: Date.now(), createdBy: 'System' },
 ];
 const KEYS_FILE = '/opt/render/project/src/keys.json';
 
