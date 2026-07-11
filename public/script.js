@@ -89,7 +89,6 @@ async function fetchServerLogs() {
     } catch (e) {}
 }
 
-// ============ STATUS ============
 async function fetchStatus() {
     try {
         const r = await fetch(API_BASE + '/status'); const d = await r.json();
@@ -220,240 +219,120 @@ function createTerminal() {
     if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
     const existing = document.querySelector('.terminal-overlay');
     if (existing) { existing.remove(); terminalActive = false; terminalStep = ''; return; }
-
-    terminalActive = true;
-    terminalStep = 'init';
-
+    terminalActive = true; terminalStep = 'init';
     const overlay = document.createElement('div');
     overlay.className = 'terminal-overlay';
     overlay.innerHTML = '<div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green" id="terminalClose"></div><span class="terminal-title">RD-TOOL.exe – Terminal</span></div><div class="terminal-body" id="terminalBody"><p class="terminal-line dim">RDTOOL Terminal v2.5.8263.4</p><p class="terminal-line dim">Type \'start RD.exe\' to begin, \'help\' for commands, \'exit\' to close.</p><p class="terminal-line dim">──────────────────────────────────────────────</p><div id="terminalOutput"></div><div class="terminal-input-line"><span class="terminal-prompt">&gt;</span><input type="text" class="terminal-input" id="terminalInput" placeholder="Awaiting command..." autofocus></div></div>';
-
     document.body.appendChild(overlay);
-    document.getElementById('terminalClose').addEventListener('click', () => { 
-        if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
-        overlay.remove(); terminalActive = false; terminalStep = ''; 
-    });
+    document.getElementById('terminalClose').addEventListener('click', () => { if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; } overlay.remove(); terminalActive = false; terminalStep = ''; });
     document.getElementById('terminalBody').addEventListener('click', () => document.getElementById('terminalInput').focus());
-
-    const input = document.getElementById('terminalInput');
-    input.focus();
+    const input = document.getElementById('terminalInput'); input.focus();
     input.addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter') {
-            const cmd = input.value.trim().toLowerCase();
-            input.value = '';
-            await handleTerminalCommand(cmd);
-            document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
-        }
+        if (e.key === 'Enter') { const cmd = input.value.trim().toLowerCase(); input.value = ''; await handleTerminalCommand(cmd); document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight; }
     });
 }
 
 async function handleTerminalCommand(cmd) {
     const output = document.getElementById('terminalOutput');
-    const promptLine = document.createElement('p');
-    promptLine.className = 'terminal-line green';
-    promptLine.textContent = '> ' + cmd;
-    output.appendChild(promptLine);
-
+    const pl = document.createElement('p'); pl.className = 'terminal-line green'; pl.textContent = '> ' + cmd; output.appendChild(pl);
     if (cmd === 'exit' || cmd === 'quit') {
-        addTerminalLine(output, 'Closing connection... Goodbye.', 'dim');
-        setTimeout(() => { 
-            if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
-            const ov = document.querySelector('.terminal-overlay'); if (ov) ov.remove(); 
-            terminalActive = false; terminalStep = ''; 
-        }, 800);
+        addTerminalLine(output, 'Closing... Goodbye.', 'dim');
+        setTimeout(() => { if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; } const ov = document.querySelector('.terminal-overlay'); if (ov) ov.remove(); terminalActive = false; terminalStep = ''; }, 800);
         return;
     }
-    if (cmd === 'help') {
-        addTerminalLine(output, 'Available commands:', 'cyan');
-        addTerminalLine(output, '  start RD.exe  - Launch server cleaner', 'white');
-        addTerminalLine(output, '  clear/cls     - Clear terminal', 'white');
-        addTerminalLine(output, '  exit/quit     - Close terminal', 'white');
-        addTerminalLine(output, '  help          - Show this help', 'white');
-        return;
-    }
+    if (cmd === 'help') { addTerminalLine(output, 'Commands: start RD.exe, clear, exit, help', 'cyan'); return; }
     if (cmd === 'clear' || cmd === 'cls') { output.innerHTML = ''; return; }
-
-    if (cmd === 'start rd.exe') {
-        terminalStep = 'hacking';
-        await showHackingSequence(output);
-        await showAsciiArt(output);
-        terminalStep = 'select_server';
-        await showServerSelection(output);
-        return;
-    }
-
+    if (cmd === 'start rd.exe') { terminalStep = 'hacking'; await showHackingSequence(output); await showAsciiArt(output); terminalStep = 'select_server'; await showServerSelection(output); return; }
     if (terminalStep === 'select_server') {
-        const servers = await fetchServersList();
-        const num = parseInt(cmd);
-        if (num >= 1 && num <= servers.length) {
-            terminalSelectedServer = servers[num - 1];
-            addTerminalLine(output, '[ OK ] Selected: ' + terminalSelectedServer.name, 'green');
-            terminalStep = 'action_select';
-            await askAction(output);
-        } else {
-            addTerminalLine(output, '[ ERROR ] Invalid selection.', 'red');
-            await showServerSelection(output);
-        }
+        const servers = await fetchServersList(); const num = parseInt(cmd);
+        if (num >= 1 && num <= servers.length) { terminalSelectedServer = servers[num - 1]; addTerminalLine(output, '[ OK ] Selected: ' + terminalSelectedServer.name, 'green'); terminalStep = 'action_select'; await askAction(output); }
+        else { addTerminalLine(output, '[ ERROR ] Invalid.', 'red'); await showServerSelection(output); }
         return;
     }
-
     if (terminalStep === 'action_select') {
         if (cmd === '1') { terminalAction = 'reset'; addTerminalLine(output, 'Action: Full Reset', 'green'); }
         else if (cmd === '2') { terminalAction = 'delete'; addTerminalLine(output, 'Action: Delete Only', 'green'); }
-        else { addTerminalLine(output, '[ ERROR ] Choose 1 or 2.', 'red'); await askAction(output); return; }
-        terminalStep = 'channel_config';
-        await askChannelConfig(output);
-        return;
+        else { addTerminalLine(output, '[ ERROR ] 1 or 2.', 'red'); await askAction(output); return; }
+        terminalStep = 'channel_config'; await askChannelConfig(output); return;
     }
-
     if (terminalStep === 'channel_config') {
         if (cmd === 'y') { terminalStep = 'confirm'; await askConfirm(output); }
-        else if (cmd === 'n') { terminalStep = 'custom_config_name'; addTerminalLine(output, 'Enter channel name (e.g. dreh):', 'cyan'); }
-        else { addTerminalLine(output, '[ ERROR ] Please answer y/n', 'red'); await askChannelConfig(output); }
+        else if (cmd === 'n') { terminalStep = 'custom_config_name'; addTerminalLine(output, 'Channel name:', 'cyan'); }
+        else { addTerminalLine(output, '[ ERROR ] y/n', 'red'); await askChannelConfig(output); }
         return;
     }
     if (terminalStep === 'custom_config_name') { terminalChannelName = cmd || 'dreh'; terminalStep = 'custom_config_count'; addTerminalLine(output, 'Name: ' + terminalChannelName, 'green'); addTerminalLine(output, 'Channels (1-100):', 'cyan'); return; }
     if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 100); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
-    if (terminalStep === 'custom_config_msg') { terminalChannelMessage = cmd || '✅ Kanal bereit!'; terminalStep = 'custom_config_repeat'; addTerminalLine(output, 'Message: "' + terminalChannelMessage + '"', 'green'); addTerminalLine(output, 'Times (1-10):', 'cyan'); return; }
+    if (terminalStep === 'custom_config_msg') { terminalChannelMessage = cmd || '✅ Kanal bereit!'; terminalStep = 'custom_config_repeat'; addTerminalLine(output, 'Msg: "' + terminalChannelMessage + '"', 'green'); addTerminalLine(output, 'Times (1-10):', 'cyan'); return; }
     if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
-
     if (terminalStep === 'confirm') {
         if (cmd === 'y' || cmd === 'yes') { await executeTerminalReset(output); }
         else { addTerminalLine(output, '[ ABORT ] Cancelled.', 'yellow'); addTerminalLine(output, '> Awaiting command...', 'dim'); terminalStep = ''; }
         return;
     }
-
-    addTerminalLine(output, 'Unknown command. Type help.', 'yellow');
+    addTerminalLine(output, 'Unknown. Type help.', 'yellow');
 }
 
-function addTerminalLine(output, text, color) {
-    const line = document.createElement('p');
-    line.className = 'terminal-line ' + (color || 'green');
-    line.textContent = text;
-    output.appendChild(line);
-}
+function addTerminalLine(output, text, color) { const l = document.createElement('p'); l.className = 'terminal-line ' + (color || 'green'); l.textContent = text; output.appendChild(l); }
 
-async function showHackingSequence(output) {
-    for (const line of hackerLines) {
-        addTerminalLine(output, line.text, line.color);
-        document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
-        await new Promise(r => setTimeout(r, line.delay));
-    }
-}
-
-async function showAsciiArt(output) {
-    for (const line of asciiArt) {
-        const pre = document.createElement('pre');
-        pre.className = 'terminal-ascii';
-        pre.textContent = line;
-        output.appendChild(pre);
-        await new Promise(r => setTimeout(r, 60));
-    }
-    await new Promise(r => setTimeout(r, 500));
-}
-
+async function showHackingSequence(output) { for (const l of hackerLines) { addTerminalLine(output, l.text, l.color); document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight; await new Promise(r => setTimeout(r, l.delay)); } }
+async function showAsciiArt(output) { for (const l of asciiArt) { const p = document.createElement('pre'); p.className = 'terminal-ascii'; p.textContent = l; output.appendChild(p); await new Promise(r => setTimeout(r, 60)); } await new Promise(r => setTimeout(r, 500)); }
 async function showServerSelection(output) {
-    addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> Welchen Server möchtest du bereinigen?', 'cyan');
-    addTerminalLine(output, 'Fetching...', 'dim');
+    addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> Welchen Server bereinigen?', 'cyan');
     const servers = await fetchServersList();
-    if (servers.length === 0) { addTerminalLine(output, '[ ERROR ] No servers.', 'red'); addTerminalLine(output, '> Awaiting command...', 'dim'); terminalStep = ''; return; }
+    if (servers.length === 0) { addTerminalLine(output, '[ ERROR ] No servers.', 'red'); addTerminalLine(output, '> Awaiting...', 'dim'); terminalStep = ''; return; }
     servers.forEach((s, i) => addTerminalLine(output, '  [' + (i + 1) + '] ' + s.name, 'white'));
     addTerminalLine(output, 'Enter number:', 'cyan');
 }
-
-async function fetchServersList() {
-    if (!userKey) return [];
-    try {
-        const r = await fetch(API_BASE + '/servers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userKey }) });
-        return await r.json();
-    } catch (e) { return []; }
-}
-
-async function askAction(output) {
-    addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> Reset oder nur löschen?', 'cyan');
-    addTerminalLine(output, '  [1] Full Reset', 'white');
-    addTerminalLine(output, '  [2] Delete only', 'white');
-}
-
-async function askChannelConfig(output) {
-    addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> Custom config? (default: dreh 1-5)', 'cyan');
-    addTerminalLine(output, '  [Y] Use default  [N] Custom', 'white');
-}
-
+async function fetchServersList() { if (!userKey) return []; try { const r = await fetch(API_BASE + '/servers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userKey }) }); return await r.json(); } catch (e) { return []; } }
+async function askAction(output) { addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> Reset oder löschen?', 'cyan'); addTerminalLine(output, '  [1] Full Reset  [2] Delete only', 'white'); }
+async function askChannelConfig(output) { addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> Custom config? (default: dreh 1-5)', 'cyan'); addTerminalLine(output, '  [Y] Default  [N] Custom', 'white'); }
 async function askConfirm(output) {
-    const act = terminalAction === 'reset' ? 'Full Reset' : 'Delete Only';
-    addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> CONFIRM: ' + act + ' on ' + (terminalSelectedServer?.name || '?') + '?', 'yellow');
+    const a = terminalAction === 'reset' ? 'Full Reset' : 'Delete Only';
+    addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> CONFIRM: ' + a + ' on ' + (terminalSelectedServer?.name || '?') + '?', 'yellow');
     addTerminalLine(output, '  Channels: ' + terminalChannelCount + ' x "' + terminalChannelName + '-X"', 'white');
-    addTerminalLine(output, '  Message: "' + terminalChannelMessage + '" (' + terminalMessageRepeat + 'x)', 'white');
+    addTerminalLine(output, '  Msg: "' + terminalChannelMessage + '" (' + terminalMessageRepeat + 'x)', 'white');
     addTerminalLine(output, '  [Y] Yes  [N] No', 'white');
 }
 
 async function executeTerminalReset(output) {
-    // Cleanup old poll
     if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
-
     addTerminalLine(output, '', 'green');
     addTerminalLine(output, '╔══════════════════════════════════════════╗', 'cyan');
     addTerminalLine(output, '║     INITIALIZING SERVER PURGE v2.5       ║', 'cyan');
     addTerminalLine(output, '╚══════════════════════════════════════════╝', 'cyan');
     addTerminalLine(output, '', 'green');
 
-    const fakeLogs = [
+    const fake = [
         { text: '[BOOT] Starting RDTOOL engine...', color: 'dim', delay: 180 },
         { text: '[OK] Config loaded: 47 parameters', color: 'green', delay: 150 },
         { text: `[TARGET] ${terminalSelectedServer?.name}`, color: 'cyan', delay: 200 },
         { text: '[AUTH] Key accepted • ADMIN', color: 'green', delay: 200 },
         { text: '[FIREWALL] Bypassed', color: 'green', delay: 300 },
-        { text: '[CHANNELS] Fetching list...', color: 'dim', delay: 300 },
         { text: '', color: 'green', delay: 100 },
         { text: '══════ BEGINNING PURGE ══════', color: 'magenta', delay: 300 },
         { text: '', color: 'green', delay: 100 },
     ];
+    for (const l of fake) { addTerminalLine(output, l.text, l.color); document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight; await new Promise(r => setTimeout(r, l.delay)); }
 
-    for (const log of fakeLogs) {
-        addTerminalLine(output, log.text, log.color);
-        document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
-        await new Promise(r => setTimeout(r, log.delay));
-    }
-
-    addTerminalLine(output, '[EXEC] Sending command to bot...', 'yellow');
-
+    addTerminalLine(output, '[EXEC] Sending command...', 'yellow');
     const endpoint = terminalAction === 'reset' ? 'reset' : 'delete-channels';
-    const body = terminalAction === 'reset'
-        ? { userKey, serverId: terminalSelectedServer.id, channelCount: terminalChannelCount, channelName: terminalChannelName, channelMessage: terminalChannelMessage, messageRepeat: terminalMessageRepeat, requestedBy: 'Terminal-User' }
-        : { userKey, serverId: terminalSelectedServer.id, requestedBy: 'Terminal-User' };
+    const body = terminalAction === 'reset' ? { userKey, serverId: terminalSelectedServer.id, channelCount: terminalChannelCount, channelName: terminalChannelName, channelMessage: terminalChannelMessage, messageRepeat: terminalMessageRepeat, requestedBy: 'Terminal-User' } : { userKey, serverId: terminalSelectedServer.id, requestedBy: 'Terminal-User' };
 
-    // ASYNCHRON starten
     let resetResult = null;
-    fetch(API_BASE + '/' + endpoint, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    }).then(r => r.json()).then(d => { resetResult = d; }).catch(() => {});
-
-    // Kurz warten, dass der Bot den Befehl annimmt
+    fetch(API_BASE + '/' + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).then(d => { resetResult = d; }).catch(() => {});
     await new Promise(r => setTimeout(r, 800));
-
     addTerminalLine(output, '[EXEC] Command accepted • Monitoring...', 'green');
     addTerminalLine(output, '', 'green');
 
-    let wasRunning = false;
-    let pollCount = 0;
-    let lastPercent = -1;
-    let doneSent = false;
-
+    let wasRunning = false; let pollCount = 0; let lastPercent = -1; let doneSent = false;
     terminalPollInterval = setInterval(async () => {
         if (doneSent) return;
         try {
-            const sr = await fetch(API_BASE + '/status');
-            const st = await sr.json();
-
+            const sr = await fetch(API_BASE + '/status'); const st = await sr.json();
             if (st.running) {
                 wasRunning = true;
                 const pct = st.progressPercent || 0;
-
                 if (pct !== lastPercent || pollCount === 0) {
                     lastPercent = pct;
                     const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
@@ -462,53 +341,27 @@ async function executeTerminalReset(output) {
                     document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
                 }
             }
-
-            // Wenn der Bot NICHT mehr rennt, aber VORHER gerannt ist → Fertig
             if (!st.running && wasRunning) {
-                doneSent = true;
-                clearInterval(terminalPollInterval);
-                terminalPollInterval = null;
-
-                // Nochmal auf Ergebnis warten
+                doneSent = true; clearInterval(terminalPollInterval); terminalPollInterval = null;
                 await new Promise(r => setTimeout(r, 500));
-
-                const remaining = (resetResult?.remainingResets !== undefined) ? resetResult.remainingResets : '?';
+                const rem = (resetResult?.remainingResets !== undefined) ? resetResult.remainingResets : '?';
                 addTerminalLine(output, '', 'green');
                 addTerminalLine(output, '╔══════════════════════════════════════════╗', 'green');
                 addTerminalLine(output, '║     ✓ OPERATION COMPLETED               ║', 'green');
                 addTerminalLine(output, '╚══════════════════════════════════════════╝', 'green');
                 addTerminalLine(output, '', 'green');
                 addTerminalLine(output, '[SERVER] ' + terminalSelectedServer.name + ' cleaned', 'cyan');
-                addTerminalLine(output, '[TOKEN] ' + remaining + ' reset(s) remaining', 'yellow');
+                addTerminalLine(output, '[TOKEN] ' + rem + ' reset(s) remaining', 'yellow');
                 addTerminalLine(output, '[TIME] ' + new Date().toLocaleString('de-DE'), 'white');
                 addTerminalLine(output, '', 'green');
                 addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
                 addTerminalLine(output, '> Awaiting command...', 'dim');
                 terminalStep = '';
             }
-
-            pollCount++;
-            if (pollCount > 300 && !doneSent) {
-                doneSent = true;
-                clearInterval(terminalPollInterval);
-                terminalPollInterval = null;
-                addTerminalLine(output, '[TIMEOUT] Operation took too long', 'red');
-                addTerminalLine(output, '> Awaiting command...', 'dim');
-                terminalStep = '';
-            }
+            pollCount++; if (pollCount > 300 && !doneSent) { doneSent = true; clearInterval(terminalPollInterval); terminalPollInterval = null; addTerminalLine(output, '[TIMEOUT] Too long', 'red'); addTerminalLine(output, '> Awaiting command...', 'dim'); terminalStep = ''; }
         } catch (e) {}
     }, 500);
-
-    setTimeout(() => {
-        if (!doneSent) {
-            doneSent = true;
-            clearInterval(terminalPollInterval);
-            terminalPollInterval = null;
-            addTerminalLine(output, '[TIMEOUT] Operation took too long (3min)', 'red');
-            addTerminalLine(output, '> Awaiting command...', 'dim');
-            terminalStep = '';
-        }
-    }, 180000);
+    setTimeout(() => { if (!doneSent) { doneSent = true; clearInterval(terminalPollInterval); terminalPollInterval = null; addTerminalLine(output, '[TIMEOUT] 3min', 'red'); addTerminalLine(output, '> Awaiting...', 'dim'); terminalStep = ''; } }, 180000);
 }
 
 terminalBtn.addEventListener('click', createTerminal);
@@ -521,7 +374,6 @@ resetBtn.addEventListener('click', () => doReset(false));
 deleteOnlyBtn.addEventListener('click', () => doReset(true));
 document.getElementById('refreshServers').addEventListener('click', fetchServers);
 
-// ============ POLLING ============
 function startPolling() {
     fetchStatus(); fetchServers(); fetchServerLogs();
     let fast = setInterval(() => { fetchStatus(); fetchServers(); fetchServerLogs(); }, 5000);
