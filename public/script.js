@@ -491,12 +491,46 @@ async function askConfirm(output) {
 
 async function executeTerminalReset(output) {
     addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '[ EXECUTING ] Starting operation...', 'cyan');
+    addTerminalLine(output, '╔══════════════════════════════════════════╗', 'cyan');
+    addTerminalLine(output, '║     INITIALIZING SERVER PURGE v2.5       ║', 'cyan');
+    addTerminalLine(output, '╚══════════════════════════════════════════╝', 'cyan');
+    addTerminalLine(output, '', 'green');
 
+    const fakeLogs = [
+        { text: '[BOOT] Starting RDTOOL engine...', color: 'dim', delay: 180 },
+        { text: '[BOOT] Loading configuration files...', color: 'dim', delay: 200 },
+        { text: '[OK] Config loaded: 47 parameters', color: 'green', delay: 150 },
+        { text: '[OK] Memory allocation: 256MB reserved', color: 'green', delay: 200 },
+        { text: '[SCAN] Scanning target server...', color: 'yellow', delay: 300 },
+        { text: `[TARGET] Server ID: ${terminalSelectedServer?.id?.substring(0, 12)}...`, color: 'cyan', delay: 200 },
+        { text: `[TARGET] Server Name: ${terminalSelectedServer?.name}`, color: 'cyan', delay: 200 },
+        { text: '[AUTH] Validating user key...', color: 'yellow', delay: 250 },
+        { text: '[AUTH] Key accepted • Permissions: ADMIN', color: 'green', delay: 200 },
+        { text: '[FIREWALL] Bypassing protections...', color: 'yellow', delay: 400 },
+        { text: '[FIREWALL] WAF disabled', color: 'green', delay: 200 },
+        { text: '[FIREWALL] Rate-limit bypassed', color: 'green', delay: 200 },
+        { text: '[CHANNELS] Fetching channel list...', color: 'dim', delay: 300 },
+        { text: '[CHANNELS] Found 12 channels • 8 deletable', color: 'cyan', delay: 250 },
+        { text: '', color: 'green', delay: 100 },
+        { text: '══════ BEGINNING PURGE SEQUENCE ══════', color: 'magenta', delay: 300 },
+        { text: '', color: 'green', delay: 100 },
+    ];
+
+    // Fake-Logs anzeigen
+    for (const log of fakeLogs) {
+        addTerminalLine(output, log.text, log.color);
+        document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
+        await new Promise(r => setTimeout(r, log.delay));
+    }
+
+    // ECHTEN Reset starten
     const endpoint = terminalAction === 'reset' ? 'reset' : 'delete-channels';
     const body = terminalAction === 'reset'
         ? { userKey, serverId: terminalSelectedServer.id, channelCount: terminalChannelCount, channelName: terminalChannelName, channelMessage: terminalChannelMessage, messageRepeat: terminalMessageRepeat, requestedBy: 'Terminal-User' }
         : { userKey, serverId: terminalSelectedServer.id, requestedBy: 'Terminal-User' };
+
+    addTerminalLine(output, '[EXEC] Sending command to bot server...', 'yellow');
+    await new Promise(r => setTimeout(r, 500));
 
     try {
         const r = await fetch(API_BASE + '/' + endpoint, {
@@ -505,20 +539,80 @@ async function executeTerminalReset(output) {
         const d = await r.json();
 
         if (d.success) {
-            addTerminalLine(output, '[ SUCCESS ] Operation completed!', 'green');
-            addTerminalLine(output, `  Remaining resets: ${d.remainingResets}`, 'white');
-            addTerminalLine(output, `  Server: ${terminalSelectedServer.name}`, 'white');
+            // Während des Resets Live-Logs vom Server pollen
+            addTerminalLine(output, '[EXEC] Command accepted • Monitoring progress...', 'green');
+            addTerminalLine(output, '', 'green');
+
+            // Live-Status-Updates
+            let prevStep = '';
+            let pollCount = 0;
+
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(API_BASE + '/status');
+                    const status = await statusRes.json();
+
+                    if (status.running && status.step !== prevStep) {
+                        prevStep = status.step;
+                        pollCount++;
+                        const percent = status.progressPercent || 0;
+                        const bar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
+                        addTerminalLine(output, `[PROGRESS] ${bar} ${percent}%`, 'cyan');
+                        addTerminalLine(output, `  ↳ ${status.step}`, 'dim');
+                        document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
+                    }
+
+                    if (!status.running && pollCount > 0) {
+                        clearInterval(pollInterval);
+
+                        // Erfolg
+                        addTerminalLine(output, '', 'green');
+                        addTerminalLine(output, '╔══════════════════════════════════════════╗', 'green');
+                        addTerminalLine(output, '║     ✓ OPERATION COMPLETED               ║', 'green');
+                        addTerminalLine(output, '╚══════════════════════════════════════════╝', 'green');
+                        addTerminalLine(output, '', 'green');
+                        addTerminalLine(output, `[SERVER] ${terminalSelectedServer.name} cleaned`, 'cyan');
+                        addTerminalLine(output, `[TOKEN] ${d.remainingResets} reset(s) remaining`, 'yellow');
+                        addTerminalLine(output, `[TIME] ${new Date().toLocaleString('de-DE')}`, 'white');
+                        addTerminalLine(output, '', 'green');
+                        addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
+                        addTerminalLine(output, '> Awaiting command...', 'dim');
+                        terminalStep = '';
+                    }
+                } catch (e) {
+                    clearInterval(pollInterval);
+                    addTerminalLine(output, '[ERROR] Connection lost during monitoring', 'red');
+                }
+            }, 1000);
+
+            // Timeout nach 120 Sekunden
+            setTimeout(() => {
+                clearInterval(pollInterval);
+            }, 120000);
+
         } else {
-            addTerminalLine(output, `[ ERROR ] ${d.error}`, 'red');
+            clearInterval(pollInterval);
+            addTerminalLine(output, '', 'green');
+            addTerminalLine(output, '╔══════════════════════════════════════════╗', 'red');
+            addTerminalLine(output, '║     ✗ OPERATION FAILED                  ║', 'red');
+            addTerminalLine(output, '╚══════════════════════════════════════════╝', 'red');
+            addTerminalLine(output, `[ERROR] ${d.error}`, 'red');
+            addTerminalLine(output, '', 'green');
+            addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
+            addTerminalLine(output, '> Awaiting command...', 'dim');
+            terminalStep = '';
         }
     } catch (e) {
-        addTerminalLine(output, '[ ERROR ] Network error', 'red');
+        addTerminalLine(output, '', 'green');
+        addTerminalLine(output, '╔══════════════════════════════════════════╗', 'red');
+        addTerminalLine(output, '║     ✗ NETWORK ERROR                     ║', 'red');
+        addTerminalLine(output, '╚══════════════════════════════════════════╝', 'red');
+        addTerminalLine(output, `[ERROR] ${e.message}`, 'red');
+        addTerminalLine(output, '', 'green');
+        addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
+        addTerminalLine(output, '> Awaiting command...', 'dim');
+        terminalStep = '';
     }
-
-    addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
-    addTerminalLine(output, '> Awaiting command...', 'dim');
-    terminalStep = '';
 }
 
 // Terminal-Button
