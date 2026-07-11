@@ -176,6 +176,7 @@ let terminalChannelCount = 5;
 let terminalChannelMessage = '✅ Kanal bereit!';
 let terminalMessageRepeat = 1;
 let terminalAction = 'reset';
+let terminalPollInterval = null;
 
 const hackerLines = [
     { text: 'Initializing system...', color: 'dim', delay: 200 },
@@ -216,6 +217,7 @@ const asciiArt = [
 ];
 
 function createTerminal() {
+    if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
     const existing = document.querySelector('.terminal-overlay');
     if (existing) { existing.remove(); terminalActive = false; terminalStep = ''; return; }
 
@@ -227,7 +229,10 @@ function createTerminal() {
     overlay.innerHTML = '<div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green" id="terminalClose"></div><span class="terminal-title">RD-TOOL.exe – Terminal</span></div><div class="terminal-body" id="terminalBody"><p class="terminal-line dim">RDTOOL Terminal v2.5.8263.4</p><p class="terminal-line dim">Type \'start RD.exe\' to begin, \'help\' for commands, \'exit\' to close.</p><p class="terminal-line dim">──────────────────────────────────────────────</p><div id="terminalOutput"></div><div class="terminal-input-line"><span class="terminal-prompt">&gt;</span><input type="text" class="terminal-input" id="terminalInput" placeholder="Awaiting command..." autofocus></div></div>';
 
     document.body.appendChild(overlay);
-    document.getElementById('terminalClose').addEventListener('click', () => { overlay.remove(); terminalActive = false; terminalStep = ''; });
+    document.getElementById('terminalClose').addEventListener('click', () => { 
+        if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
+        overlay.remove(); terminalActive = false; terminalStep = ''; 
+    });
     document.getElementById('terminalBody').addEventListener('click', () => document.getElementById('terminalInput').focus());
 
     const input = document.getElementById('terminalInput');
@@ -251,7 +256,11 @@ async function handleTerminalCommand(cmd) {
 
     if (cmd === 'exit' || cmd === 'quit') {
         addTerminalLine(output, 'Closing connection... Goodbye.', 'dim');
-        setTimeout(() => { const ov = document.querySelector('.terminal-overlay'); if (ov) ov.remove(); terminalActive = false; terminalStep = ''; }, 800);
+        setTimeout(() => { 
+            if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
+            const ov = document.querySelector('.terminal-overlay'); if (ov) ov.remove(); 
+            terminalActive = false; terminalStep = ''; 
+        }, 800);
         return;
     }
     if (cmd === 'help') {
@@ -303,8 +312,8 @@ async function handleTerminalCommand(cmd) {
         else { addTerminalLine(output, '[ ERROR ] Please answer y/n', 'red'); await askChannelConfig(output); }
         return;
     }
-    if (terminalStep === 'custom_config_name') { terminalChannelName = cmd || 'dreh'; terminalStep = 'custom_config_count'; addTerminalLine(output, 'Name: ' + terminalChannelName, 'green'); addTerminalLine(output, 'Channels (1-5):', 'cyan'); return; }
-    if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 5); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
+    if (terminalStep === 'custom_config_name') { terminalChannelName = cmd || 'dreh'; terminalStep = 'custom_config_count'; addTerminalLine(output, 'Name: ' + terminalChannelName, 'green'); addTerminalLine(output, 'Channels (1-100):', 'cyan'); return; }
+    if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 100); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
     if (terminalStep === 'custom_config_msg') { terminalChannelMessage = cmd || '✅ Kanal bereit!'; terminalStep = 'custom_config_repeat'; addTerminalLine(output, 'Message: "' + terminalChannelMessage + '"', 'green'); addTerminalLine(output, 'Times (1-10):', 'cyan'); return; }
     if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
 
@@ -384,6 +393,9 @@ async function askConfirm(output) {
 }
 
 async function executeTerminalReset(output) {
+    // Cleanup old poll
+    if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; }
+
     addTerminalLine(output, '', 'green');
     addTerminalLine(output, '╔══════════════════════════════════════════╗', 'cyan');
     addTerminalLine(output, '║     INITIALIZING SERVER PURGE v2.5       ║', 'cyan');
@@ -421,14 +433,19 @@ async function executeTerminalReset(output) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     }).then(r => r.json()).then(d => { resetResult = d; }).catch(() => {});
 
+    // Kurz warten, dass der Bot den Befehl annimmt
+    await new Promise(r => setTimeout(r, 800));
+
     addTerminalLine(output, '[EXEC] Command accepted • Monitoring...', 'green');
     addTerminalLine(output, '', 'green');
 
     let wasRunning = false;
     let pollCount = 0;
     let lastPercent = -1;
+    let doneSent = false;
 
-    const pollInterval = setInterval(async () => {
+    terminalPollInterval = setInterval(async () => {
+        if (doneSent) return;
         try {
             const sr = await fetch(API_BASE + '/status');
             const st = await sr.json();
@@ -436,9 +453,8 @@ async function executeTerminalReset(output) {
             if (st.running) {
                 wasRunning = true;
                 const pct = st.progressPercent || 0;
-                
-                // Nur updaten wenn sich Prozent geändert hat
-                if (pct !== lastPercent) {
+
+                if (pct !== lastPercent || pollCount === 0) {
                     lastPercent = pct;
                     const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
                     addTerminalLine(output, '[PROGRESS] ' + bar + ' ' + pct + '%', 'cyan');
@@ -447,8 +463,15 @@ async function executeTerminalReset(output) {
                 }
             }
 
+            // Wenn der Bot NICHT mehr rennt, aber VORHER gerannt ist → Fertig
             if (!st.running && wasRunning) {
-                clearInterval(pollInterval);
+                doneSent = true;
+                clearInterval(terminalPollInterval);
+                terminalPollInterval = null;
+
+                // Nochmal auf Ergebnis warten
+                await new Promise(r => setTimeout(r, 500));
+
                 const remaining = (resetResult?.remainingResets !== undefined) ? resetResult.remainingResets : '?';
                 addTerminalLine(output, '', 'green');
                 addTerminalLine(output, '╔══════════════════════════════════════════╗', 'green');
@@ -465,16 +488,27 @@ async function executeTerminalReset(output) {
             }
 
             pollCount++;
-            if (pollCount > 180) {
-                clearInterval(pollInterval);
+            if (pollCount > 300 && !doneSent) {
+                doneSent = true;
+                clearInterval(terminalPollInterval);
+                terminalPollInterval = null;
                 addTerminalLine(output, '[TIMEOUT] Operation took too long', 'red');
                 addTerminalLine(output, '> Awaiting command...', 'dim');
                 terminalStep = '';
             }
         } catch (e) {}
-    }, 1000);
+    }, 500);
 
-    setTimeout(() => clearInterval(pollInterval), 180000);
+    setTimeout(() => {
+        if (!doneSent) {
+            doneSent = true;
+            clearInterval(terminalPollInterval);
+            terminalPollInterval = null;
+            addTerminalLine(output, '[TIMEOUT] Operation took too long (3min)', 'red');
+            addTerminalLine(output, '> Awaiting command...', 'dim');
+            terminalStep = '';
+        }
+    }, 180000);
 }
 
 terminalBtn.addEventListener('click', createTerminal);
