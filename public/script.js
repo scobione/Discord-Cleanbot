@@ -346,12 +346,12 @@ async function handleTerminalCommand(cmd) {
         terminalChannelName = cmd || 'dreh';
         terminalStep = 'custom_config_count';
         addTerminalLine(output, `Channel name: ${terminalChannelName}`, 'green');
-        addTerminalLine(output, 'Enter number of channels (1-5):', 'cyan');
+        addTerminalLine(output, 'Enter number of channels (1-100):', 'cyan');
         return;
     }
 
     if (terminalStep === 'custom_config_count') {
-        terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 5);
+        terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 100, 1), 100);
         terminalStep = 'custom_config_msg';
         addTerminalLine(output, `Count: ${terminalChannelCount}`, 'green');
         addTerminalLine(output, 'Enter message for each channel:', 'cyan');
@@ -362,12 +362,12 @@ async function handleTerminalCommand(cmd) {
         terminalChannelMessage = cmd || '✅ Kanal bereit!';
         terminalStep = 'custom_config_repeat';
         addTerminalLine(output, `Message: "${terminalChannelMessage}"`, 'green');
-        addTerminalLine(output, 'Times per channel (1-10):', 'cyan');
+        addTerminalLine(output, 'Times per channel (1-15):', 'cyan');
         return;
     }
 
     if (terminalStep === 'custom_config_repeat') {
-        terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10);
+        terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 15);
         addTerminalLine(output, `Repeat: ${terminalMessageRepeat}x`, 'green');
         terminalStep = 'action_select';
         await askAction(output);
