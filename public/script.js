@@ -524,71 +524,94 @@ async function executeTerminalReset(output) {
     }
 
     // ECHTEN Reset starten
+addTerminalLine(output, '[EXEC] Sending command to bot server...', 'yellow');
+    await new Promise(r => setTimeout(r, 500));
+
+    // Reset ASYNCHRON starten (nicht warten!)
     const endpoint = terminalAction === 'reset' ? 'reset' : 'delete-channels';
     const body = terminalAction === 'reset'
         ? { userKey, serverId: terminalSelectedServer.id, channelCount: terminalChannelCount, channelName: terminalChannelName, channelMessage: terminalChannelMessage, messageRepeat: terminalMessageRepeat, requestedBy: 'Terminal-User' }
         : { userKey, serverId: terminalSelectedServer.id, requestedBy: 'Terminal-User' };
 
-    addTerminalLine(output, '[EXEC] Sending command to bot server...', 'yellow');
-    await new Promise(r => setTimeout(r, 500));
+    let resetResult = null;
+    let resetError = null;
 
-    try {
-        const r = await fetch(API_BASE + '/' + endpoint, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-        });
-        const d = await r.json();
+    // Feuer-und-vergessen: Reset starten
+    fetch(API_BASE + '/' + endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(r => r.json()).then(d => {
+        resetResult = d;
+    }).catch(e => {
+        resetError = e;
+    });
 
-        if (d.success) {
-            // Während des Resets Live-Logs vom Server pollen
-            addTerminalLine(output, '[EXEC] Command accepted • Monitoring progress...', 'green');
-            addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '[EXEC] Command accepted • Monitoring progress...', 'green');
+    addTerminalLine(output, '', 'green');
 
-            // Live-Status-Updates
-            let prevStep = '';
-            let pollCount = 0;
+    // Live-Status-Updates
+    let prevStep = '';
+    let pollCount = 0;
+    let wasRunning = false;
 
-            const pollInterval = setInterval(async () => {
-                try {
-                    const statusRes = await fetch(API_BASE + '/status');
-                    const status = await statusRes.json();
+    const pollInterval = setInterval(async () => {
+        try {
+            const statusRes = await fetch(API_BASE + '/status');
+            const status = await statusRes.json();
 
-                    if (status.running && status.step !== prevStep) {
-                        prevStep = status.step;
-                        pollCount++;
-                        const percent = status.progressPercent || 0;
-                        const bar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
-                        addTerminalLine(output, `[PROGRESS] ${bar} ${percent}%`, 'cyan');
-                        addTerminalLine(output, `  ↳ ${status.step}`, 'dim');
-                        document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
-                    }
-
-                    if (!status.running && pollCount > 0) {
-                        clearInterval(pollInterval);
-
-                        // Erfolg
-                        addTerminalLine(output, '', 'green');
-                        addTerminalLine(output, '╔══════════════════════════════════════════╗', 'green');
-                        addTerminalLine(output, '║     ✓ OPERATION COMPLETED               ║', 'green');
-                        addTerminalLine(output, '╚══════════════════════════════════════════╝', 'green');
-                        addTerminalLine(output, '', 'green');
-                        addTerminalLine(output, `[SERVER] ${terminalSelectedServer.name} cleaned`, 'cyan');
-                        addTerminalLine(output, `[TOKEN] ${d.remainingResets} reset(s) remaining`, 'yellow');
-                        addTerminalLine(output, `[TIME] ${new Date().toLocaleString('de-DE')}`, 'white');
-                        addTerminalLine(output, '', 'green');
-                        addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
-                        addTerminalLine(output, '> Awaiting command...', 'dim');
-                        terminalStep = '';
-                    }
-                } catch (e) {
-                    clearInterval(pollInterval);
-                    addTerminalLine(output, '[ERROR] Connection lost during monitoring', 'red');
+            if (status.running) {
+                wasRunning = true;
+                if (status.step !== prevStep) {
+                    prevStep = status.step;
+                    pollCount++;
+                    const percent = status.progressPercent || 0;
+                    const filled = Math.floor(percent / 5);
+                    const empty = 20 - filled;
+                    const bar = '█'.repeat(filled) + '░'.repeat(empty);
+                    addTerminalLine(output, `[PROGRESS] ${bar} ${percent}%`, 'cyan');
+                    addTerminalLine(output, `  ↳ ${status.step}`, 'dim');
+                    document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
                 }
-            }, 1000);
+            }
 
-            // Timeout nach 120 Sekunden
-            setTimeout(() => {
+            if (!status.running && wasRunning) {
                 clearInterval(pollInterval);
-            }, 120000);
+
+                // Erfolg
+                addTerminalLine(output, '', 'green');
+                addTerminalLine(output, '╔══════════════════════════════════════════╗', 'green');
+                addTerminalLine(output, '║     ✓ OPERATION COMPLETED               ║', 'green');
+                addTerminalLine(output, '╚══════════════════════════════════════════╝', 'green');
+                addTerminalLine(output, '', 'green');
+
+                // Token-Info aus der Status-Antwort holen
+                const remaining = status.stats?.totalResets ? 'Check Dashboard' : 
+                    (resetResult?.remainingResets !== undefined ? resetResult.remainingResets : '?');
+
+                addTerminalLine(output, `[SERVER] ${terminalSelectedServer.name} cleaned`, 'cyan');
+                addTerminalLine(output, `[TOKEN] ${remaining} reset(s) remaining`, 'yellow');
+                addTerminalLine(output, `[TIME] ${new Date().toLocaleString('de-DE')}`, 'white');
+                addTerminalLine(output, '', 'green');
+                addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
+                addTerminalLine(output, '> Awaiting command...', 'dim');
+                terminalStep = '';
+            }
+
+            // Fallback: nach 120 Sekunden abbrechen
+            if (pollCount > 120) {
+                clearInterval(pollInterval);
+                addTerminalLine(output, '[TIMEOUT] Operation took too long', 'red');
+                addTerminalLine(output, '> Awaiting command...', 'dim');
+                terminalStep = '';
+            }
+        } catch (e) {
+            // Silent fail, weitermachen
+        }
+    }, 1000);
+
+    // Timeout nach 120 Sekunden
+    setTimeout(() => {
+        clearInterval(pollInterval);
+    }, 120000);
 
         } else {
             clearInterval(pollInterval);
