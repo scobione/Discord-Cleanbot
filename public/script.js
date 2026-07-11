@@ -166,6 +166,364 @@ function showAdminPanel(keys) {
     document.querySelectorAll('.btn-delete').forEach(btn => { btn.addEventListener('click', async () => { if (!confirm('Key löschen?')) return; await fetch(API_BASE + '/admin/delete-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPassword, key: btn.dataset.key }) }); loadAdminPanel(); }); });
 }
 
+// ============ TERMINAL ============
+const terminalBtn = document.getElementById('terminalBtn');
+let terminalActive = false;
+let terminalStep = '';
+let terminalSelectedServer = null;
+let terminalChannelName = 'dreh';
+let terminalChannelCount = 5;
+let terminalChannelMessage = '✅ Kanal bereit!';
+let terminalMessageRepeat = 1;
+let terminalAction = 'reset';
+
+const hackerLines = [
+    { text: 'Initializing system...', color: 'dim', delay: 200 },
+    { text: 'Loading kernel modules...', color: 'dim', delay: 300 },
+    { text: '[ OK ] kernel32.sys', color: 'green', delay: 150 },
+    { text: '[ OK ] ntfs.sys', color: 'green', delay: 150 },
+    { text: '[ OK ] tcpip.sys', color: 'green', delay: 150 },
+    { text: 'Scanning network interfaces...', color: 'dim', delay: 400 },
+    { text: '[ INFO ] eth0: 192.168.1.100', color: 'cyan', delay: 200 },
+    { text: '[ INFO ] wlan0: 10.0.0.42', color: 'cyan', delay: 200 },
+    { text: 'Establishing secure connection...', color: 'dim', delay: 500 },
+    { text: '[ TLS ] Handshake complete', color: 'green', delay: 200 },
+    { text: '[ TLS ] Cipher: AES-256-GCM', color: 'green', delay: 200 },
+    { text: 'Cracking server...', color: 'yellow', delay: 400 },
+    { text: '[ SCAN ] Port 80: OPEN', color: 'green', delay: 250 },
+    { text: '[ SCAN ] Port 443: OPEN', color: 'green', delay: 250 },
+    { text: '[ SCAN ] Port 22: FILTERED', color: 'yellow', delay: 250 },
+    { text: '[ SCAN ] Port 3306: CLOSED', color: 'red', delay: 250 },
+    { text: 'Finding endpoint...', color: 'cyan', delay: 600 },
+    { text: '[ FOUND ] /api/gateway', color: 'green', delay: 300 },
+    { text: '[ FOUND ] /api/v2/reset', color: 'green', delay: 300 },
+    { text: 'Bypassing firewall...', color: 'yellow', delay: 500 },
+    { text: '[ OK ] Firewall bypassed', color: 'green', delay: 200 },
+    { text: 'Loading server list...', color: 'dim', delay: 400 },
+    { text: '[ OK ] 2 servers found', color: 'green', delay: 300 },
+];
+
+const asciiArt = `
+    ██████╗ ██████╗ ████████╗ ██████╗  ██████╗ ██╗     
+    ██╔══██╗██╔══██╗╚══██╔══╝██╔═══██╗██╔═══██╗██║     
+    ██████╔╝██║  ██║   ██║   ██║   ██║██║   ██║██║     
+    ██╔══██╗██║  ██║   ██║   ██║   ██║██║   ██║██║     
+    ██║  ██║██████╔╝   ██║   ╚██████╔╝╚██████╔╝███████╗
+    ╚═╝  ╚═╝╚═════╝    ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝
+                                                         
+    ══════════════════════════════════════════════════════
+    RDTOOL v2.5.8263.4 | Server Cleaner
+    ══════════════════════════════════════════════════════
+`;
+
+function createTerminal() {
+    const existing = document.querySelector('.terminal-overlay');
+    if (existing) { existing.remove(); terminalActive = false; return; }
+
+    terminalActive = true;
+    terminalStep = 'init';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'terminal-overlay';
+    overlay.innerHTML = `
+        <div class="terminal-header">
+            <div class="terminal-dot red"></div>
+            <div class="terminal-dot yellow"></div>
+            <div class="terminal-dot green" id="terminalClose"></div>
+            <span class="terminal-title">RD-TOOL.exe – Terminal</span>
+        </div>
+        <div class="terminal-body" id="terminalBody">
+            <p class="terminal-line dim">RDTOOL Terminal v2.5.8263.4</p>
+            <p class="terminal-line dim">Type 'start RD.exe' to begin, 'help' for commands, 'exit' to close.</p>
+            <p class="terminal-line dim">──────────────────────────────────────────────</p>
+            <div id="terminalOutput"></div>
+            <div class="terminal-input-line">
+                <span class="terminal-prompt">&gt;</span>
+                <input type="text" class="terminal-input" id="terminalInput" placeholder="Awaiting command..." autofocus>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    document.getElementById('terminalClose').addEventListener('click', () => overlay.remove());
+    document.getElementById('terminalBody').addEventListener('click', () => document.getElementById('terminalInput').focus());
+
+    const input = document.getElementById('terminalInput');
+    input.focus();
+
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            const cmd = input.value.trim().toLowerCase();
+            input.value = '';
+            await handleTerminalCommand(cmd);
+            document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
+        }
+    });
+}
+
+async function handleTerminalCommand(cmd) {
+    const output = document.getElementById('terminalOutput');
+    const promptLine = document.createElement('p');
+    promptLine.className = 'terminal-line green';
+    promptLine.textContent = '> ' + cmd;
+    output.appendChild(promptLine);
+
+    // Exit
+    if (cmd === 'exit' || cmd === 'quit') {
+        const line = document.createElement('p');
+        line.className = 'terminal-line dim';
+        line.textContent = 'Closing connection... Goodbye.';
+        output.appendChild(line);
+        setTimeout(() => {
+            document.querySelector('.terminal-overlay').remove();
+            terminalActive = false;
+            terminalStep = '';
+        }, 800);
+        return;
+    }
+
+    // Help
+    if (cmd === 'help') {
+        addTerminalLine(output, 'Available commands:', 'cyan');
+        addTerminalLine(output, '  start RD.exe  - Launch server cleaner', 'white');
+        addTerminalLine(output, '  clear/cls     - Clear terminal', 'white');
+        addTerminalLine(output, '  exit/quit     - Close terminal', 'white');
+        addTerminalLine(output, '  help          - Show this help', 'white');
+        return;
+    }
+
+    // Clear
+    if (cmd === 'clear' || cmd === 'cls') {
+        output.innerHTML = '';
+        return;
+    }
+
+    // Start RD.exe
+    if (cmd === 'start rd.exe') {
+        terminalStep = 'hacking';
+        await showHackingSequence(output);
+        await showAsciiArt(output);
+        terminalStep = 'select_server';
+        await showServerSelection(output);
+        return;
+    }
+
+    // Server-Auswahl
+    if (terminalStep === 'select_server') {
+        const servers = await fetchServersList();
+        const num = parseInt(cmd);
+        if (num >= 1 && num <= servers.length) {
+            terminalSelectedServer = servers[num - 1];
+            addTerminalLine(output, `[ OK ] Selected: ${terminalSelectedServer.name}`, 'green');
+            terminalStep = 'channel_config';
+            await askChannelConfig(output);
+        } else {
+            addTerminalLine(output, '[ ERROR ] Invalid selection. Try again.', 'red');
+            await showServerSelection(output);
+        }
+        return;
+    }
+
+    // Kanal-Konfiguration
+    if (terminalStep === 'channel_config') {
+        if (cmd === 'y') {
+            // Use defaults
+            terminalStep = 'action_select';
+            await askAction(output);
+        } else if (cmd === 'n') {
+            // Custom
+            terminalStep = 'custom_config_name';
+            addTerminalLine(output, 'Enter channel name (e.g. dreh):', 'cyan');
+        } else {
+            addTerminalLine(output, '[ ERROR ] Please answer y/n', 'red');
+            await askChannelConfig(output);
+        }
+        return;
+    }
+
+    if (terminalStep === 'custom_config_name') {
+        terminalChannelName = cmd || 'dreh';
+        terminalStep = 'custom_config_count';
+        addTerminalLine(output, `Channel name: ${terminalChannelName}`, 'green');
+        addTerminalLine(output, 'Enter number of channels (1-5):', 'cyan');
+        return;
+    }
+
+    if (terminalStep === 'custom_config_count') {
+        terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 5);
+        terminalStep = 'custom_config_msg';
+        addTerminalLine(output, `Count: ${terminalChannelCount}`, 'green');
+        addTerminalLine(output, 'Enter message for each channel:', 'cyan');
+        return;
+    }
+
+    if (terminalStep === 'custom_config_msg') {
+        terminalChannelMessage = cmd || '✅ Kanal bereit!';
+        terminalStep = 'custom_config_repeat';
+        addTerminalLine(output, `Message: "${terminalChannelMessage}"`, 'green');
+        addTerminalLine(output, 'Times per channel (1-10):', 'cyan');
+        return;
+    }
+
+    if (terminalStep === 'custom_config_repeat') {
+        terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10);
+        addTerminalLine(output, `Repeat: ${terminalMessageRepeat}x`, 'green');
+        terminalStep = 'action_select';
+        await askAction(output);
+        return;
+    }
+
+    // Aktion auswählen
+    if (terminalStep === 'action_select') {
+        if (cmd === '1') {
+            terminalAction = 'reset';
+            addTerminalLine(output, 'Action: Full Reset', 'green');
+        } else if (cmd === '2') {
+            terminalAction = 'delete';
+            addTerminalLine(output, 'Action: Delete Channels Only', 'green');
+        } else {
+            addTerminalLine(output, '[ ERROR ] Invalid. Choose 1 or 2.', 'red');
+            await askAction(output);
+            return;
+        }
+        terminalStep = 'confirm';
+        await askConfirm(output);
+        return;
+    }
+
+    // Bestätigung
+    if (terminalStep === 'confirm') {
+        if (cmd === 'y' || cmd === 'yes') {
+            await executeTerminalReset(output);
+        } else {
+            addTerminalLine(output, '[ ABORT ] Operation cancelled.', 'yellow');
+            addTerminalLine(output, '> Awaiting command...', 'dim');
+            terminalStep = '';
+        }
+        return;
+    }
+
+    // Unknown command
+    addTerminalLine(output, `Unknown command: '${cmd}'. Type 'help' for commands.`, 'yellow');
+}
+
+function addTerminalLine(output, text, color) {
+    const line = document.createElement('p');
+    line.className = `terminal-line ${color || 'green'}`;
+    line.textContent = text;
+    output.appendChild(line);
+}
+
+async function showHackingSequence(output) {
+    for (const line of hackerLines) {
+        const p = document.createElement('p');
+        p.className = `terminal-line ${line.color}`;
+        p.textContent = line.text;
+        output.appendChild(p);
+        document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
+        await new Promise(r => setTimeout(r, line.delay));
+    }
+}
+
+async function showAsciiArt(output) {
+    const pre = document.createElement('pre');
+    pre.className = 'terminal-ascii';
+    pre.textContent = asciiArt;
+    output.appendChild(pre);
+    await new Promise(r => setTimeout(r, 800));
+}
+
+async function showServerSelection(output) {
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '>> Welchen Server möchtest du bereinigen?', 'cyan');
+    addTerminalLine(output, 'Fetching server list...', 'dim');
+
+    const servers = await fetchServersList();
+
+    if (servers.length === 0) {
+        addTerminalLine(output, '[ ERROR ] No servers available. Add bot to a server first.', 'red');
+        addTerminalLine(output, '> Awaiting command...', 'dim');
+        terminalStep = '';
+        return;
+    }
+
+    servers.forEach((s, i) => {
+        addTerminalLine(output, `  [${i + 1}] ${s.name}`, 'white');
+    });
+    addTerminalLine(output, 'Enter number:', 'cyan');
+}
+
+async function fetchServersList() {
+    if (!userKey) return [];
+    try {
+        const r = await fetch(API_BASE + '/servers', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userKey })
+        });
+        return await r.json();
+    } catch (e) {
+        return [];
+    }
+}
+
+async function askChannelConfig(output) {
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '>> Use default config? (dreh-1..5, "✅ Kanal bereit!", 1x)', 'cyan');
+    addTerminalLine(output, '  [Y] Yes  [N] No (custom)', 'white');
+}
+
+async function askAction(output) {
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '>> Soll der Server resettet oder nur Kanäle gelöscht werden?', 'cyan');
+    addTerminalLine(output, '  [1] Full Reset (delete all + create new)', 'white');
+    addTerminalLine(output, '  [2] Delete channels only', 'white');
+}
+
+async function askConfirm(output) {
+    const actionText = terminalAction === 'reset' ? 'Full Reset' : 'Delete Channels Only';
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, `>> CONFIRM: ${actionText} on ${terminalSelectedServer?.name || 'Unknown'}?`, 'yellow');
+    addTerminalLine(output, `  Channels: ${terminalChannelCount} × "${terminalChannelName}-X"`, 'white');
+    addTerminalLine(output, `  Message: "${terminalChannelMessage}" (${terminalMessageRepeat}x per channel)`, 'white');
+    addTerminalLine(output, '  [Y] Yes  [N] No', 'white');
+}
+
+async function executeTerminalReset(output) {
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '[ EXECUTING ] Starting operation...', 'cyan');
+
+    const endpoint = terminalAction === 'reset' ? 'reset' : 'delete-channels';
+    const body = terminalAction === 'reset'
+        ? { userKey, serverId: terminalSelectedServer.id, channelCount: terminalChannelCount, channelName: terminalChannelName, channelMessage: terminalChannelMessage, messageRepeat: terminalMessageRepeat, requestedBy: 'Terminal-User' }
+        : { userKey, serverId: terminalSelectedServer.id, requestedBy: 'Terminal-User' };
+
+    try {
+        const r = await fetch(API_BASE + '/' + endpoint, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const d = await r.json();
+
+        if (d.success) {
+            addTerminalLine(output, '[ SUCCESS ] Operation completed!', 'green');
+            addTerminalLine(output, `  Remaining resets: ${d.remainingResets}`, 'white');
+            addTerminalLine(output, `  Server: ${terminalSelectedServer.name}`, 'white');
+        } else {
+            addTerminalLine(output, `[ ERROR ] ${d.error}`, 'red');
+        }
+    } catch (e) {
+        addTerminalLine(output, '[ ERROR ] Network error', 'red');
+    }
+
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '──────────────────────────────────────────────', 'dim');
+    addTerminalLine(output, '> Awaiting command...', 'dim');
+    terminalStep = '';
+}
+
+// Terminal-Button
+terminalBtn.addEventListener('click', createTerminal);
+
 // ============ EVENTS ============
 serverSelect.addEventListener('change', e => { selectedServer = e.target.value; });
 channelCount.addEventListener('input', e => { channelCountDisplay.textContent = e.target.value; });
