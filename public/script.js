@@ -432,15 +432,20 @@ async function executeTerminalReset(output) {
             const sr = await fetch(API_BASE + '/status');
             const st = await sr.json();
 
-            if (st.running) {
-                wasRunning = true;
-                if (st.step !== prevStep) {
-                    prevStep = st.step;
-                    pollCount++;
-                    const pct = st.progressPercent || 0;
-                    const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
+            // DEBUG: Zeige aktuellen Status
+            if (st.running || wasRunning) {
+                const pct = st.progressPercent || 0;
+                const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
+                
+                if (st.running) wasRunning = true;
+                
+                // Immer updaten, nicht nur bei neuem Step
+                const lastLine = output.lastElementChild;
+                const isProgress = lastLine && lastLine.textContent && lastLine.textContent.includes('[PROGRESS]');
+                
+                if (!isProgress || st.running) {
                     addTerminalLine(output, '[PROGRESS] ' + bar + ' ' + pct + '%', 'cyan');
-                    addTerminalLine(output, '  ' + st.step, 'dim');
+                    if (st.step) addTerminalLine(output, '  ' + st.step, 'dim');
                     document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
                 }
             }
@@ -462,16 +467,19 @@ async function executeTerminalReset(output) {
                 terminalStep = '';
             }
 
-            if (pollCount > 120) {
+            pollCount++;
+            if (pollCount > 180) {
                 clearInterval(pollInterval);
-                addTerminalLine(output, '[TIMEOUT] Too long', 'red');
+                addTerminalLine(output, '[TIMEOUT] Operation took too long', 'red');
                 addTerminalLine(output, '> Awaiting command...', 'dim');
                 terminalStep = '';
             }
-        } catch (e) {}
-    }, 1000);
+        } catch (e) {
+            // silent
+        }
+    }, 800);
 
-    setTimeout(() => clearInterval(pollInterval), 120000);
+    setTimeout(() => clearInterval(pollInterval), 180000);20000);
 }
 
 terminalBtn.addEventListener('click', createTerminal);
