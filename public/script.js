@@ -172,7 +172,7 @@ let terminalActive = false;
 let terminalStep = '';
 let terminalSelectedServer = null;
 let terminalChannelName = 'dreh';
-let terminalChannelCount = 3;
+let terminalChannelCount = 5;
 let terminalChannelMessage = '✅ Kanal bereit!';
 let terminalMessageRepeat = 1;
 let terminalAction = 'reset';
@@ -303,10 +303,10 @@ async function handleTerminalCommand(cmd) {
         else { addTerminalLine(output, '[ ERROR ] Please answer y/n', 'red'); await askChannelConfig(output); }
         return;
     }
-    if (terminalStep === 'custom_config_name') { terminalChannelName = cmd || 'dreh'; terminalStep = 'custom_config_count'; addTerminalLine(output, 'Name: ' + terminalChannelName, 'green'); addTerminalLine(output, 'Channels (1-3):', 'cyan'); return; }
-    if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 100, 1), 100); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
+    if (terminalStep === 'custom_config_name') { terminalChannelName = cmd || 'dreh'; terminalStep = 'custom_config_count'; addTerminalLine(output, 'Name: ' + terminalChannelName, 'green'); addTerminalLine(output, 'Channels (1-5):', 'cyan'); return; }
+    if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 5); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
     if (terminalStep === 'custom_config_msg') { terminalChannelMessage = cmd || '✅ Kanal bereit!'; terminalStep = 'custom_config_repeat'; addTerminalLine(output, 'Message: "' + terminalChannelMessage + '"', 'green'); addTerminalLine(output, 'Times (1-10):', 'cyan'); return; }
-    if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 15); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
+    if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
 
     if (terminalStep === 'confirm') {
         if (cmd === 'y' || cmd === 'yes') { await executeTerminalReset(output); }
@@ -370,7 +370,7 @@ async function askAction(output) {
 
 async function askChannelConfig(output) {
     addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> Custom config? (not reccomended)(default: dreh 1-100)', 'cyan');
+    addTerminalLine(output, '>> Custom config? (default: dreh 1-5)', 'cyan');
     addTerminalLine(output, '  [Y] Use default  [N] Custom', 'white');
 }
 
@@ -392,10 +392,11 @@ async function executeTerminalReset(output) {
 
     const fakeLogs = [
         { text: '[BOOT] Starting RDTOOL engine...', color: 'dim', delay: 180 },
-        { text: '[OK] Config loaded', color: 'green', delay: 150 },
+        { text: '[OK] Config loaded: 47 parameters', color: 'green', delay: 150 },
         { text: `[TARGET] ${terminalSelectedServer?.name}`, color: 'cyan', delay: 200 },
         { text: '[AUTH] Key accepted • ADMIN', color: 'green', delay: 200 },
         { text: '[FIREWALL] Bypassed', color: 'green', delay: 300 },
+        { text: '[CHANNELS] Fetching list...', color: 'dim', delay: 300 },
         { text: '', color: 'green', delay: 100 },
         { text: '══════ BEGINNING PURGE ══════', color: 'magenta', delay: 300 },
         { text: '', color: 'green', delay: 100 },
@@ -407,7 +408,7 @@ async function executeTerminalReset(output) {
         await new Promise(r => setTimeout(r, log.delay));
     }
 
-    addTerminalLine(output, '[EXEC] Sending command...', 'yellow');
+    addTerminalLine(output, '[EXEC] Sending command to bot...', 'yellow');
 
     const endpoint = terminalAction === 'reset' ? 'reset' : 'delete-channels';
     const body = terminalAction === 'reset'
@@ -423,29 +424,25 @@ async function executeTerminalReset(output) {
     addTerminalLine(output, '[EXEC] Command accepted • Monitoring...', 'green');
     addTerminalLine(output, '', 'green');
 
-    let prevStep = '';
     let wasRunning = false;
     let pollCount = 0;
+    let lastPercent = -1;
 
     const pollInterval = setInterval(async () => {
         try {
             const sr = await fetch(API_BASE + '/status');
             const st = await sr.json();
 
-            // DEBUG: Zeige aktuellen Status
-            if (st.running || wasRunning) {
+            if (st.running) {
+                wasRunning = true;
                 const pct = st.progressPercent || 0;
-                const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
                 
-                if (st.running) wasRunning = true;
-                
-                // Immer updaten, nicht nur bei neuem Step
-                const lastLine = output.lastElementChild;
-                const isProgress = lastLine && lastLine.textContent && lastLine.textContent.includes('[PROGRESS]');
-                
-                if (!isProgress || st.running) {
+                // Nur updaten wenn sich Prozent geändert hat
+                if (pct !== lastPercent) {
+                    lastPercent = pct;
+                    const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
                     addTerminalLine(output, '[PROGRESS] ' + bar + ' ' + pct + '%', 'cyan');
-                    if (st.step) addTerminalLine(output, '  ' + st.step, 'dim');
+                    if (st.step) addTerminalLine(output, '  ↳ ' + st.step, 'dim');
                     document.getElementById('terminalBody').scrollTop = document.getElementById('terminalBody').scrollHeight;
                 }
             }
@@ -474,12 +471,10 @@ async function executeTerminalReset(output) {
                 addTerminalLine(output, '> Awaiting command...', 'dim');
                 terminalStep = '';
             }
-        } catch (e) {
-            // silent
-        }
-    }, 800);
+        } catch (e) {}
+    }, 1000);
 
-    setTimeout(() => clearInterval(pollInterval), 180000);20000);
+    setTimeout(() => clearInterval(pollInterval), 180000);
 }
 
 terminalBtn.addEventListener('click', createTerminal);
