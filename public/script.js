@@ -304,9 +304,9 @@ async function handleTerminalCommand(cmd) {
         return;
     }
     if (terminalStep === 'custom_config_name') { terminalChannelName = cmd || 'dreh'; terminalStep = 'custom_config_count'; addTerminalLine(output, 'Name: ' + terminalChannelName, 'green'); addTerminalLine(output, 'Channels (1-3):', 'cyan'); return; }
-    if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 3, 1), 3); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
+    if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 100, 1), 100); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
     if (terminalStep === 'custom_config_msg') { terminalChannelMessage = cmd || '✅ Kanal bereit!'; terminalStep = 'custom_config_repeat'; addTerminalLine(output, 'Message: "' + terminalChannelMessage + '"', 'green'); addTerminalLine(output, 'Times (1-10):', 'cyan'); return; }
-    if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
+    if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 15); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
 
     if (terminalStep === 'confirm') {
         if (cmd === 'y' || cmd === 'yes') { await executeTerminalReset(output); }
