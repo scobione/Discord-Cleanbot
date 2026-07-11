@@ -235,6 +235,7 @@ function createTerminal() {
 async function handleTerminalCommand(cmd) {
     const output = document.getElementById('terminalOutput');
     const pl = document.createElement('p'); pl.className = 'terminal-line green'; pl.textContent = '> ' + cmd; output.appendChild(pl);
+    
     if (cmd === 'exit' || cmd === 'quit') {
         addTerminalLine(output, 'Closing... Goodbye.', 'dim');
         setTimeout(() => { if (terminalPollInterval) { clearInterval(terminalPollInterval); terminalPollInterval = null; } const ov = document.querySelector('.terminal-overlay'); if (ov) ov.remove(); terminalActive = false; terminalStep = ''; }, 800);
@@ -242,19 +243,23 @@ async function handleTerminalCommand(cmd) {
     }
     if (cmd === 'help') { addTerminalLine(output, 'Commands: start RD.exe, clear, exit, help', 'cyan'); return; }
     if (cmd === 'clear' || cmd === 'cls') { output.innerHTML = ''; return; }
+    
     if (cmd === 'start rd.exe') { terminalStep = 'hacking'; await showHackingSequence(output); await showAsciiArt(output); terminalStep = 'select_server'; await showServerSelection(output); return; }
+    
     if (terminalStep === 'select_server') {
         const servers = await fetchServersList(); const num = parseInt(cmd);
         if (num >= 1 && num <= servers.length) { terminalSelectedServer = servers[num - 1]; addTerminalLine(output, '[ OK ] Selected: ' + terminalSelectedServer.name, 'green'); terminalStep = 'action_select'; await askAction(output); }
         else { addTerminalLine(output, '[ ERROR ] Invalid.', 'red'); await showServerSelection(output); }
         return;
     }
+    
     if (terminalStep === 'action_select') {
-        if (cmd === '1') { terminalAction = 'reset'; addTerminalLine(output, 'Action: Full Reset', 'green'); }
-        else if (cmd === '2') { terminalAction = 'delete'; addTerminalLine(output, 'Action: Delete Only', 'green'); }
-        else { addTerminalLine(output, '[ ERROR ] 1 or 2.', 'red'); await askAction(output); return; }
-        terminalStep = 'channel_config'; await askChannelConfig(output); return;
+        if (cmd === '1') { terminalAction = 'reset'; addTerminalLine(output, 'Action: Full Reset', 'green'); terminalStep = 'channel_config'; await askChannelConfig(output); }
+        else if (cmd === '2') { terminalAction = 'delete'; addTerminalLine(output, 'Action: Delete Only', 'green'); terminalStep = 'confirm'; await askConfirm(output); }
+        else { addTerminalLine(output, '[ ERROR ] 1 or 2.', 'red'); await askAction(output); }
+        return;
     }
+    
     if (terminalStep === 'channel_config') {
         if (cmd === 'y') { terminalStep = 'confirm'; await askConfirm(output); }
         else if (cmd === 'n') { terminalStep = 'custom_config_name'; addTerminalLine(output, 'Channel name:', 'cyan'); }
@@ -265,6 +270,7 @@ async function handleTerminalCommand(cmd) {
     if (terminalStep === 'custom_config_count') { terminalChannelCount = Math.min(Math.max(parseInt(cmd) || 5, 1), 100); terminalStep = 'custom_config_msg'; addTerminalLine(output, 'Count: ' + terminalChannelCount, 'green'); addTerminalLine(output, 'Message:', 'cyan'); return; }
     if (terminalStep === 'custom_config_msg') { terminalChannelMessage = cmd || '✅ Kanal bereit!'; terminalStep = 'custom_config_repeat'; addTerminalLine(output, 'Msg: "' + terminalChannelMessage + '"', 'green'); addTerminalLine(output, 'Times (1-10):', 'cyan'); return; }
     if (terminalStep === 'custom_config_repeat') { terminalMessageRepeat = Math.min(Math.max(parseInt(cmd) || 1, 1), 10); addTerminalLine(output, 'Repeat: ' + terminalMessageRepeat + 'x', 'green'); terminalStep = 'confirm'; await askConfirm(output); return; }
+    
     if (terminalStep === 'confirm') {
         if (cmd === 'y' || cmd === 'yes') { await executeTerminalReset(output); }
         else { addTerminalLine(output, '[ ABORT ] Cancelled.', 'yellow'); addTerminalLine(output, '> Awaiting command...', 'dim'); terminalStep = ''; }
@@ -285,13 +291,30 @@ async function showServerSelection(output) {
     addTerminalLine(output, 'Enter number:', 'cyan');
 }
 async function fetchServersList() { if (!userKey) return []; try { const r = await fetch(API_BASE + '/servers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userKey }) }); return await r.json(); } catch (e) { return []; } }
-async function askAction(output) { addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> Reset oder löschen?', 'cyan'); addTerminalLine(output, '  [1] Full Reset  [2] Delete only', 'white'); }
-async function askChannelConfig(output) { addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> Custom config? (default: dreh 1-5)', 'cyan'); addTerminalLine(output, '  [Y] Default  [N] Custom', 'white'); }
+
+async function askAction(output) {
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '>> Reset oder löschen?', 'cyan');
+    addTerminalLine(output, '  [1] Full Reset (mit Kanälen)', 'white');
+    addTerminalLine(output, '  [2] Delete only (nur löschen)', 'white');
+}
+
+async function askChannelConfig(output) {
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '>> Custom config? (default: dreh 1-5)', 'cyan');
+    addTerminalLine(output, '  [Y] Default  [N] Custom', 'white');
+}
+
 async function askConfirm(output) {
     const a = terminalAction === 'reset' ? 'Full Reset' : 'Delete Only';
-    addTerminalLine(output, '', 'green'); addTerminalLine(output, '>> CONFIRM: ' + a + ' on ' + (terminalSelectedServer?.name || '?') + '?', 'yellow');
-    addTerminalLine(output, '  Channels: ' + terminalChannelCount + ' x "' + terminalChannelName + '-X"', 'white');
-    addTerminalLine(output, '  Msg: "' + terminalChannelMessage + '" (' + terminalMessageRepeat + 'x)', 'white');
+    addTerminalLine(output, '', 'green');
+    addTerminalLine(output, '>> CONFIRM: ' + a + ' on ' + (terminalSelectedServer?.name || '?') + '?', 'yellow');
+    if (terminalAction === 'reset') {
+        addTerminalLine(output, '  Channels: ' + terminalChannelCount + ' x "' + terminalChannelName + '-X"', 'white');
+        addTerminalLine(output, '  Msg: "' + terminalChannelMessage + '" (' + terminalMessageRepeat + 'x)', 'white');
+    } else {
+        addTerminalLine(output, '  ALLE Kanäle werden gelöscht!', 'red');
+    }
     addTerminalLine(output, '  [Y] Yes  [N] No', 'white');
 }
 
