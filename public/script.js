@@ -370,7 +370,7 @@ async function askAction(output) {
 
 async function askChannelConfig(output) {
     addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> Custom config? (default: dreh 1-3)', 'cyan');
+    addTerminalLine(output, '>> Custom config? (not reccomended)(default: dreh 1-100)', 'cyan');
     addTerminalLine(output, '  [Y] Use default  [N] Custom', 'white');
 }
 
