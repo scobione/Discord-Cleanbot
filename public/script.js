@@ -469,7 +469,7 @@ async function fetchServersList() {
 
 async function askChannelConfig(output) {
     addTerminalLine(output, '', 'green');
-    addTerminalLine(output, '>> Use default config? (dreh-1..5, "✅ Kanal bereit!", 1x)', 'cyan');
+    addTerminalLine(output, '>> Use default config? (dreh-1..100, "✅ Kanal bereit!", 1x)', 'cyan');
     addTerminalLine(output, '  [Y] Yes  [N] No (custom)', 'white');
 }
 
